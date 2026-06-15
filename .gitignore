@@ -1,0 +1,32 @@
+node_modules
+dist
+.env
+.env.local
+.env.production
+*.local
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+*.pyo
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# Firebase
+.firebase/
+
+# Test artifacts
+test-results/
+
+# Supabase
+supabase/.temp/
+
+# OS
+.DS_Store
+
+# Next build output (root)
+.next/
