@@ -1,7 +1,7 @@
 """Agent 1 -- Decision Router.
 
-Uses GPT-4.1-mini with function calling to decide whether the AI tutor
-should respond to a given transcript chunk, and if so, what kind of
+Uses Gemini 2.5 Flash with structured JSON output to decide whether the AI
+tutor should respond to a given transcript chunk, and if so, what kind of
 response to generate.
 """
 
@@ -12,7 +12,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from google import genai
 
 from agents.prompts import ROUTER_PROMPTS, DEFAULT_ROUTER_PROMPT
 from models.schemas import RouterDecision
@@ -21,65 +21,36 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-MODEL = "gpt-4.1-mini"
+MODEL = "gemini-2.5-flash"
 
-# OpenAI function-calling tool definition for structured output.
-_ROUTER_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "make_decision",
-        "description": (
-            "Decide whether the AI tutor should respond to the student's "
-            "latest transcript chunk and, if so, what it should say."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "should_respond": {
-                    "type": "boolean",
-                    "description": (
-                        "True if the AI tutor should speak now, False if it "
-                        "should stay silent."
-                    ),
-                },
-                "response_instruction": {
-                    "type": "string",
-                    "description": (
-                        "A clear, detailed instruction for the voice agent "
-                        "describing WHAT to say and WHY. Include the specific "
-                        "concept, fact, or question involved. Leave empty if "
-                        "should_respond is false."
-                    ),
-                },
-                "response_type": {
-                    "type": "string",
-                    "enum": [
-                        "correction",
-                        "question",
-                        "explanation",
-                        "encouragement",
-                        "quiz_question",
-                        "silent",
-                    ],
-                    "description": "The category of response to generate.",
-                },
-                "detected_level": {
-                    "type": "string",
-                    "enum": ["beginner", "intermediate", "advanced"],
-                    "description": (
-                        "Student's detected language proficiency based on their "
-                        "speech patterns. Only set in language mode. "
-                        "beginner: simple vocab, short sentences, frequent errors. "
-                        "intermediate: varied vocab, compound sentences, occasional errors. "
-                        "advanced: complex structures, idiomatic usage, rare errors."
-                    ),
-                },
-            },
-            "required": ["should_respond", "response_instruction", "response_type"],
+_ROUTER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "should_respond": {
+            "type": "boolean",
+            "description": "True if the AI tutor should speak now, False to stay silent.",
+        },
+        "response_instruction": {
+            "type": "string",
+            "description": (
+                "A clear instruction for the voice agent describing WHAT to say "
+                "and WHY (specific concept, fact, or question). Empty if silent."
+            ),
+        },
+        "response_type": {
+            "type": "string",
+            "enum": ["correction", "question", "explanation", "encouragement", "quiz_question", "silent"],
+            "description": "The category of response to generate.",
+        },
+        "detected_level": {
+            "type": "string",
+            "enum": ["beginner", "intermediate", "advanced"],
+            "description": "Student's detected proficiency (language mode only).",
         },
     },
+    "required": ["should_respond", "response_instruction", "response_type"],
 }
 
 
@@ -91,48 +62,36 @@ async def should_respond(
 ) -> dict:
     """Evaluate a transcript chunk and decide on the AI's next action.
 
-    Args:
-        transcript_chunk: The latest text from the student's speech.
-        mode: Current study mode (determines the system prompt).
-        context: Assembled session context from the memory service.
-        language_proficiency: Optional proficiency info for language mode.
-
-    Returns:
-        A dict matching the RouterDecision schema:
-            {
-                "should_respond": bool,
-                "response_instruction": str,
-                "response_type": str,
-                "detected_level": str | None,
-            }
+    Returns a dict matching the RouterDecision schema.
     """
     system_prompt = ROUTER_PROMPTS.get(mode, DEFAULT_ROUTER_PROMPT)
 
     user_content = f"## Session Context\n{context}\n\n"
     if language_proficiency:
         user_content += f"## Student Language Proficiency\n{language_proficiency}\n\n"
-    user_content += f"## Student Transcript\n{transcript_chunk}"
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-    ]
+    user_content += (
+        f"## Student Transcript\n{transcript_chunk}\n\n"
+        "Decide whether to respond now and, if so, what to say. Respond with JSON."
+    )
 
     try:
-        response = await _client.chat.completions.create(
+        response = await _client.aio.models.generate_content(
             model=MODEL,
-            messages=messages,
-            tools=[_ROUTER_TOOL],
-            tool_choice={"type": "function", "function": {"name": "make_decision"}},
-            temperature=0.2,
-            max_tokens=256,
+            contents=user_content,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.2,
+                max_output_tokens=512,
+                response_mime_type="application/json",
+                response_schema=_ROUTER_SCHEMA,
+            ),
         )
 
-        # Extract function call arguments.
-        tool_call = response.choices[0].message.tool_calls[0]
-        args = json.loads(tool_call.function.arguments)
+        text = response.text
+        if not text:
+            raise ValueError("empty router response")
 
-        # Validate through pydantic then return as dict.
+        args = json.loads(text)
         decision = RouterDecision(**args)
         return decision.model_dump()
 

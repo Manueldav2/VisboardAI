@@ -1,59 +1,49 @@
-"""Embedding service using OpenAI text-embedding-3-small (1536 dimensions)."""
+"""Embedding service using Gemini gemini-embedding-001.
+
+Output is truncated to 1536 dimensions to match the existing pgvector
+column, then L2-normalized (recommended for sub-3072-dim Gemini vectors).
+"""
 
 from __future__ import annotations
 
+import math
 import os
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from google import genai
 
 load_dotenv()
 
-_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-MODEL = "text-embedding-3-small"
+MODEL = "gemini-embedding-001"
 DIMENSIONS = 1536
 
 
+def _normalize(v: list[float]) -> list[float]:
+    norm = math.sqrt(sum(x * x for x in v)) or 1.0
+    return [x / norm for x in v]
+
+
 async def create_embedding(text: str) -> list[float]:
-    """Generate a single embedding vector for the given text.
-
-    Args:
-        text: The text to embed. Will be stripped and truncated to ~8 000 tokens
-              worth of characters as a safety measure.
-
-    Returns:
-        A list of 1536 floats representing the embedding vector.
-    """
-    text = text.strip()
+    """Generate a single 1536-dim embedding vector for the given text."""
+    text = text.strip()[:32_000]
     if not text:
         return [0.0] * DIMENSIONS
 
-    # OpenAI's text-embedding-3-small supports up to 8191 tokens.
-    # A rough char limit (~32 000 chars) avoids token-counting overhead.
-    text = text[:32_000]
-
-    response = await _client.embeddings.create(
-        input=text,
+    res = await _client.aio.models.embed_content(
         model=MODEL,
-        dimensions=DIMENSIONS,
+        contents=text,
+        config=genai.types.EmbedContentConfig(output_dimensionality=DIMENSIONS),
     )
-    return response.data[0].embedding
+    return _normalize(list(res.embeddings[0].values))
 
 
 async def create_embeddings_batch(texts: list[str]) -> list[list[float]]:
-    """Generate embeddings for a batch of texts in a single API call.
-
-    Args:
-        texts: A list of strings to embed. Empty strings receive zero vectors.
-
-    Returns:
-        A list of embedding vectors, one per input text, preserving order.
-    """
+    """Generate embeddings for a batch of texts, preserving order."""
     if not texts:
         return []
 
-    # Separate empty texts so we don't waste API calls on them.
     cleaned: list[tuple[int, str]] = []
     results: list[list[float] | None] = [None] * len(texts)
 
@@ -65,19 +55,13 @@ async def create_embeddings_batch(texts: list[str]) -> list[list[float]]:
             results[idx] = [0.0] * DIMENSIONS
 
     if cleaned:
-        # OpenAI allows up to 2048 inputs per batch call.
         batch_texts = [t for _, t in cleaned]
-        response = await _client.embeddings.create(
-            input=batch_texts,
+        res = await _client.aio.models.embed_content(
             model=MODEL,
-            dimensions=DIMENSIONS,
+            contents=batch_texts,
+            config=genai.types.EmbedContentConfig(output_dimensionality=DIMENSIONS),
         )
+        for (orig_idx, _), emb in zip(cleaned, res.embeddings):
+            results[orig_idx] = _normalize(list(emb.values))
 
-        # The API returns embeddings in the same order as the inputs, but each
-        # object carries an `index` field for safety.
-        for emb_obj in response.data:
-            original_idx = cleaned[emb_obj.index][0]
-            results[original_idx] = emb_obj.embedding
-
-    # Replace any remaining Nones (shouldn't happen, but be safe).
     return [v if v is not None else [0.0] * DIMENSIONS for v in results]

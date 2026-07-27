@@ -16,15 +16,15 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from google import genai
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-MODEL = "gpt-4.1-mini"
+MODEL = "gemini-2.5-flash"
 
 _SYSTEM_PROMPT = """You are the orchestrator for Gideon, an AI study assistant. Your job is to
 understand what the student needs and activate the right skills.
@@ -144,58 +144,40 @@ async def orchestrate(
             "proactive_action": "none",
         }
     """
-    messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
-
-    # Add student profile context
+    sys_parts = [_SYSTEM_PROMPT]
     if student_profile:
-        profile_summary = _summarize_profile(student_profile)
-        messages.append({
-            "role": "system",
-            "content": f"Student profile:\n{profile_summary}",
-        })
-
-    # Add current state
+        sys_parts.append("Student profile:\n" + _summarize_profile(student_profile))
     state_parts = []
     if current_skills:
         state_parts.append(f"Currently active skills: {', '.join(current_skills)}")
     if session_duration_seconds > 0:
-        mins = session_duration_seconds // 60
-        state_parts.append(f"Session duration: {mins} minutes")
+        state_parts.append(f"Session duration: {session_duration_seconds // 60} minutes")
     if state_parts:
-        messages.append({
-            "role": "system",
-            "content": "\n".join(state_parts),
-        })
+        sys_parts.append("\n".join(state_parts))
 
-    # Add conversation context
+    convo = ""
     if conversation_history:
         for entry in conversation_history[-6:]:
-            role = entry.get("role", "user")
-            # Map 'model' to 'assistant' for OpenAI
-            if role == "model":
-                role = "assistant"
-            messages.append({
-                "role": role,
-                "content": entry.get("text", ""),
-            })
-
-    messages.append({"role": "user", "content": text})
+            who = "Student" if entry.get("role", "user") == "user" else "Gideon"
+            convo += f"{who}: {entry.get('text', '')}\n"
+    user_content = (
+        (f"## Recent conversation\n{convo}\n" if convo else "")
+        + f"## Latest message\n{text}\n\nDecide which skills to activate. Respond with JSON."
+    )
 
     try:
-        response = await _client.chat.completions.create(
+        response = await _client.aio.models.generate_content(
             model=MODEL,
-            messages=messages,
-            tools=[_ORCHESTRATE_TOOL],
-            tool_choice={
-                "type": "function",
-                "function": {"name": "orchestrate"},
-            },
-            temperature=0,
-            max_tokens=256,
+            contents=user_content,
+            config=genai.types.GenerateContentConfig(
+                system_instruction="\n\n".join(sys_parts),
+                temperature=0,
+                max_output_tokens=512,
+                response_mime_type="application/json",
+                response_schema=_ORCHESTRATE_TOOL["function"]["parameters"],
+            ),
         )
-
-        tool_call = response.choices[0].message.tool_calls[0]
-        args = json.loads(tool_call.function.arguments)
+        args = json.loads(response.text or "{}")
 
         return {
             "active_skills": args.get("active_skills", ["general", "thought_plot"]),

@@ -15,15 +15,15 @@ import os
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from google import genai
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-MODEL = "gpt-4.1-mini"
+MODEL = "gemini-2.5-flash"
 
 _SYSTEM_PROMPT = """You are a post-session analyst for Gideon, an AI study assistant.
 Analyze the session transcript and produce a structured summary.
@@ -157,50 +157,33 @@ async def analyze_session(
             "profile_updates": {},
         }
 
-    messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
-
-    # Build context
-    context_parts = [
-        f"Tool: {tool}, Mode: {mode}",
-        f"Duration: {duration_seconds // 60} minutes",
-    ]
+    context_parts = [f"Tool: {tool}, Mode: {mode}", f"Duration: {duration_seconds // 60} minutes"]
     if class_id:
         context_parts.append(f"Class ID: {class_id}")
-    messages.append({
-        "role": "system",
-        "content": "Session context:\n" + "\n".join(context_parts),
-    })
 
-    # Add conversation (cap at last 40 turns for token efficiency)
+    convo = ""
     for entry in conversation_history[-40:]:
-        role = entry.get("role", "user")
-        if role == "model":
-            role = "assistant"
-        messages.append({
-            "role": role,
-            "content": entry.get("text", ""),
-        })
+        who = "Student" if entry.get("role", "user") == "user" else "Gideon"
+        convo += f"{who}: {entry.get('text', '')}\n"
 
-    messages.append({
-        "role": "user",
-        "content": "The session has ended. Analyze the conversation and provide your assessment.",
-    })
+    user_content = (
+        "Session context:\n" + "\n".join(context_parts)
+        + f"\n\n## Transcript\n{convo}\n\nThe session has ended. Analyze it and respond with JSON."
+    )
 
     try:
-        response = await _client.chat.completions.create(
+        response = await _client.aio.models.generate_content(
             model=MODEL,
-            messages=messages,
-            tools=[_ANALYZE_TOOL],
-            tool_choice={
-                "type": "function",
-                "function": {"name": "session_analysis"},
-            },
-            temperature=0.2,
-            max_tokens=512,
+            contents=user_content,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                temperature=0.2,
+                max_output_tokens=1024,
+                response_mime_type="application/json",
+                response_schema=_ANALYZE_TOOL["function"]["parameters"],
+            ),
         )
-
-        tool_call = response.choices[0].message.tool_calls[0]
-        args = json.loads(tool_call.function.arguments)
+        args = json.loads(response.text or "{}")
 
         return {
             "summary": args.get("summary", ""),

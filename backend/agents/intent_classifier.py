@@ -12,15 +12,15 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from google import genai
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-MODEL = "gpt-4.1-mini"
+MODEL = "gemini-2.5-flash"
 
 _SYSTEM_PROMPT = """You are an intent classifier for an AI study platform called VisboardAI.
 The platform has these tools:
@@ -55,51 +55,27 @@ it in the general chat.
 
 Be decisive — if there's even a moderate signal, suggest the specialized tool."""
 
-_CLASSIFIER_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "classify_intent",
-        "description": "Classify the user's message intent to route to the best tool.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "tool": {
-                    "type": "string",
-                    "enum": [
-                        "study_buddy",
-                        "thought_plot",
-                        "architect",
-                        "argument_ref",
-                        "general",
-                    ],
-                    "description": "The best tool to handle this request.",
-                },
-                "mode": {
-                    "type": "string",
-                    "description": (
-                        "The specific mode within the tool. "
-                        "For study_buddy: quiz, guided_study, cram, language, strategy, general. "
-                        "For thought_plot: general, topic_locked, class_mode, study, quiz. "
-                        "For architect: default. "
-                        "For argument_ref: referee, harvey, analyze. "
-                        "For general: default."
-                    ),
-                },
-                "confidence": {
-                    "type": "number",
-                    "description": "Confidence 0-1 in this classification.",
-                },
-                "reason": {
-                    "type": "string",
-                    "description": (
-                        "Brief user-friendly explanation of why this tool fits, "
-                        "e.g. 'It sounds like you want to practice for an exam'"
-                    ),
-                },
-            },
-            "required": ["tool", "mode", "confidence", "reason"],
+_INTENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tool": {
+            "type": "string",
+            "enum": ["study_buddy", "thought_plot", "architect", "argument_ref", "general"],
+            "description": "The best tool to handle this request.",
         },
+        "mode": {
+            "type": "string",
+            "description": (
+                "The specific mode within the tool. "
+                "study_buddy: quiz, guided_study, cram, language, strategy, general. "
+                "thought_plot: general, topic_locked, class_mode, study, quiz. "
+                "architect: default. argument_ref: referee, harvey, analyze. general: default."
+            ),
+        },
+        "confidence": {"type": "number", "description": "Confidence 0-1."},
+        "reason": {"type": "string", "description": "Brief user-friendly explanation of the fit."},
     },
+    "required": ["tool", "mode", "confidence", "reason"],
 }
 
 
@@ -121,34 +97,30 @@ async def classify_intent(
             "reason": str,
         }
     """
-    messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
-
-    # Add recent conversation context (last 4 turns)
+    convo = ""
     if conversation_history:
         for entry in conversation_history[-4:]:
-            messages.append({
-                "role": entry.get("role", "user"),
-                "content": entry.get("text", ""),
-            })
+            who = "Student" if entry.get("role", "user") == "user" else "Gideon"
+            convo += f"{who}: {entry.get('text', '')}\n"
 
-    messages.append({"role": "user", "content": text})
+    user_content = (
+        (f"## Recent conversation\n{convo}\n" if convo else "")
+        + f"## Latest message\n{text}\n\nClassify into the best tool and mode. Respond with JSON."
+    )
 
     try:
-        response = await _client.chat.completions.create(
+        response = await _client.aio.models.generate_content(
             model=MODEL,
-            messages=messages,
-            tools=[_CLASSIFIER_TOOL],
-            tool_choice={
-                "type": "function",
-                "function": {"name": "classify_intent"},
-            },
-            temperature=0,
-            max_tokens=128,
+            contents=user_content,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                temperature=0,
+                max_output_tokens=256,
+                response_mime_type="application/json",
+                response_schema=_INTENT_SCHEMA,
+            ),
         )
-
-        tool_call = response.choices[0].message.tool_calls[0]
-        args = json.loads(tool_call.function.arguments)
-
+        args = json.loads(response.text or "{}")
         return {
             "tool": args.get("tool", "general"),
             "mode": args.get("mode", "default"),
