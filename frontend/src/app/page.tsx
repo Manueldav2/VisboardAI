@@ -1126,6 +1126,7 @@ export default function GideonPage() {
       isMobile={isMobile}
       onMic={handleToggleMic}
       onQuickAction={sendMessage}
+      onPastChats={() => setSidebarOpen(true)}
     />
   );
 
