@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { MermaidExport } from '@/components/MermaidExport';
 import { SessionHistory } from '@/components/SessionHistory';
+import { WelcomeHero } from '@/components/WelcomeHero';
 import type { SessionDetail } from '@/lib/types';
 import type {
   StudyMode, StudyClass, ThoughtPlotMode,
@@ -532,6 +533,7 @@ export default function GideonPage() {
       m.default.registerLayoutLoaders(elkLayouts.default);
       m.default.initialize({
         startOnLoad: false,
+        suppressErrorRendering: true,
         theme: 'base',
         themeVariables: {
           darkMode: true,
@@ -964,18 +966,20 @@ export default function GideonPage() {
     if (item.type === 'speech') {
       const isUser = item.speaker === 'user';
       const useMarkdown = !isUser && activeTool === 'architect';
+      const name = isUser ? 'You' : activeTool ? (TOOL_LABELS[activeTool] || 'Gideon') : 'Gideon';
       return (
-        <div key={item.id} className={`mb-3 ${isUser ? 'flex justify-end' : ''} animate-fade-up`}>
-          <div className={`${isMobile ? 'max-w-[88%]' : 'max-w-2xl'} rounded-2xl px-4 py-3`}
-            style={{ background: isUser ? 'var(--accent-muted)' : 'var(--surface)', border: `1px solid ${isUser ? 'rgba(212, 166, 74, 0.15)' : 'var(--border-subtle)'}` }}>
-            <span className="text-[10px] font-medium uppercase tracking-wider block mb-1"
-              style={{ color: isUser ? 'var(--accent)' : 'var(--text-faint)' }}>
-              {isUser ? 'You' : activeTool ? (TOOL_LABELS[activeTool] || 'Gideon') : 'Gideon'}
+        <div key={item.id} className={`msg-row ${isUser ? 'is-user' : 'is-ai'}`}>
+          {!isUser && (
+            <span className="msg-avatar" aria-hidden>
+              <Network size={13} strokeWidth={2.5} />
             </span>
+          )}
+          <div className={`msg-bubble ${isUser ? 'is-user' : 'is-ai'} ${isMobile ? 'max-w-[86%]' : 'max-w-2xl'}`}>
+            <span className="msg-name">{name}</span>
             {useMarkdown ? (
               <div className="space-y-0.5">{renderMarkdown(item.text || '')}</div>
             ) : (
-              <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{item.text}</div>
+              <div className="msg-text">{item.text}</div>
             )}
           </div>
         </div>
@@ -1116,53 +1120,13 @@ export default function GideonPage() {
 
   // ── Welcome Screen ──
   const WelcomeScreen = (
-    <div className="flex flex-col items-center justify-center h-full text-center px-4">
-      <div className="relative mb-6">
-        <div className="absolute inset-0 rounded-full blur-3xl" style={{
-          background: 'radial-gradient(circle, rgba(212,166,74,0.15) 0%, transparent 70%)',
-          width: 180, height: 180, left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-          animation: 'gideon-breathe 4s ease-in-out infinite',
-        }} />
-        <div className="relative w-20 h-20 rounded-2xl flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg, var(--accent), #b8923d)', boxShadow: '0 4px 24px rgba(212,166,74,0.3)' }}>
-          <MessageCircle size={36} style={{ color: 'var(--bg)' }} />
-        </div>
-      </div>
-      <h1 className="heading-display mb-2" style={{ fontSize: 'clamp(2.2rem, 5vw, 3.5rem)', color: 'var(--text-primary)' }}>Gideon</h1>
-      <p className="text-sm mb-1" style={{ color: 'var(--accent)', fontWeight: 600 }}>Your AI Study Companion</p>
-      <p className="text-sm max-w-md mb-8 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-        Talk to me about anything. I&apos;ll quiz you, map your ideas, plan your architecture, referee your debates — all through natural conversation.
-      </p>
-      <div className="flex items-center gap-2 mb-6">
-        <span className={`status-dot ${aiStatus}`} />
-        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          {realtimeStatus === 'connected' ? (aiStatus === 'listening' ? 'Listening...' : aiStatus === 'thinking' ? 'Thinking...' : aiStatus === 'speaking' ? 'Speaking...' : 'Connected') : 'Ready'}
-        </span>
-      </div>
-      <button onClick={handleToggleMic} className={`mic-btn ${realtimeStatus === 'connected' ? 'recording' : ''}`}
-        style={isMobile ? { width: 80, height: 80 } : undefined}>
-        {realtimeStatus === 'connected' ? <MicOff size={isMobile ? 32 : 24} /> : <Mic size={isMobile ? 32 : 24} />}
-        {realtimeStatus === 'connected' && <span className="mic-ring" />}
-      </button>
-      <p className="text-xs mt-3 mb-8" style={{ color: 'var(--text-faint)' }}>
-        {realtimeStatus === 'connecting' ? 'Connecting...' : realtimeStatus === 'connected' ? 'Tap to disconnect' : 'Tap to start speaking, or type below'}
-      </p>
-      <div className={`grid ${isMobile ? 'grid-cols-2' : 'grid-cols-4'} gap-2 max-w-lg w-full`}>
-        {QUICK_ACTIONS.map(action => {
-          const Icon = action.icon;
-          return (
-            <button key={action.label} onClick={() => sendMessage(action.prompt)}
-              className="flex flex-col items-center gap-2 p-3 rounded-xl transition-all cursor-pointer group"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)', minHeight: 72 }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = action.color; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}>
-              <Icon size={18} style={{ color: action.color }} />
-              <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{action.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <WelcomeHero
+      realtimeStatus={realtimeStatus}
+      aiStatus={aiStatus}
+      isMobile={isMobile}
+      onMic={handleToggleMic}
+      onQuickAction={sendMessage}
+    />
   );
 
   // ── Diagram Panel (generic) ──
@@ -1961,11 +1925,11 @@ export default function GideonPage() {
                 {realtimeStatus === 'connecting' ? <Loader2 size={18} className="animate-spin" /> : realtimeStatus === 'connected' ? <MicOff size={18} /> : <Mic size={18} />}
               </button>
 
-              <form onSubmit={handleTextSubmit} className="flex-1 flex items-center gap-2">
-                <input type="text" className="form-input text-sm"
-                  placeholder={activeTool ? `Talk to ${TOOL_LABELS[activeTool] || 'Gideon'}...` : 'Talk to Gideon...'}
+              <form onSubmit={handleTextSubmit} className="composer flex-1">
+                <input type="text" className="composer-input"
+                  placeholder={activeTool ? `Talk to ${TOOL_LABELS[activeTool] || 'Gideon'}…` : 'Talk to Gideon…'}
                   value={textInput} onChange={e => setTextInput(e.target.value)} />
-                <button type="submit" disabled={!textInput.trim()} className="btn-primary px-3 py-2" style={{ minHeight: 44 }}><Send size={16} /></button>
+                <button type="submit" disabled={!textInput.trim()} className="composer-send" aria-label="Send"><Send size={16} /></button>
               </form>
 
               {sessionActive && (

@@ -9,10 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@mermaid-js/layout-elk": "^0.2.0",
     "@supabase/supabase-js": "^2.95.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "gsap": "^3.15.0",
     "lucide-react": "^0.563.0",
     "mermaid": "^11.12.2",
     "motion": "^12.34.0",

@@ -57,7 +57,9 @@ export function useRealtimeVoice({
         body: JSON.stringify({ voice, tool: tool || undefined, mode: mode || 'general' }),
       });
       if (!tokenRes.ok) throw new Error('Failed to get realtime session token');
-      const { client_secret } = await tokenRes.json();
+      const { client_secret, model: sessionModel } = await tokenRes.json();
+      if (!client_secret) throw new Error('No realtime client secret returned');
+      const realtimeModel = sessionModel || 'gpt-realtime';
 
       // 2. Create PeerConnection
       const pc = new RTCPeerConnection();
@@ -126,7 +128,9 @@ export function useRealtimeVoice({
               }
               break;
 
+            // GA renamed audio events to `output_audio*`; accept both.
             case 'response.audio_transcript.delta':
+            case 'response.output_audio_transcript.delta':
               responseTextBuffer += (event.delta || '');
               break;
 
@@ -142,6 +146,7 @@ export function useRealtimeVoice({
             }
 
             case 'response.audio.delta':
+            case 'response.output_audio.delta':
               // Audio flows through WebRTC track, not data channel
               // But this event signals the model is producing audio
               updateAiStatus('speaking');
@@ -171,7 +176,7 @@ export function useRealtimeVoice({
       await pc.setLocalDescription(offer);
 
       const sdpRes = await fetch(
-        'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview',
+        `https://api.openai.com/v1/realtime/calls?model=${encodeURIComponent(realtimeModel)}`,
         {
           method: 'POST',
           headers: {
@@ -182,7 +187,11 @@ export function useRealtimeVoice({
         }
       );
 
-      if (!sdpRes.ok) throw new Error('SDP exchange failed');
+      if (!sdpRes.ok) {
+        const body = await sdpRes.text().catch(() => '');
+        console.error('SDP exchange failed', sdpRes.status, body);
+        throw new Error(`SDP exchange failed (${sdpRes.status})`);
+      }
 
       const answerSdp = await sdpRes.text();
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
@@ -229,7 +238,7 @@ export function useRealtimeVoice({
 
   const updateSession = useCallback((instructions: string, tools?: unknown[]) => {
     if (dcRef.current?.readyState !== 'open') return;
-    const session: Record<string, unknown> = { instructions };
+    const session: Record<string, unknown> = { type: 'realtime', instructions };
     if (tools) session.tools = tools;
     dcRef.current.send(JSON.stringify({
       type: 'session.update',

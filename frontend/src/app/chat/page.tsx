@@ -152,6 +152,7 @@ export default function ChatPage() {
     import('mermaid').then((m) => {
       m.default.initialize({
         startOnLoad: false,
+        suppressErrorRendering: true,
         theme: 'dark',
         themeVariables: {
           darkMode: true,

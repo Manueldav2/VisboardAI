@@ -27,6 +27,7 @@ import base64
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -326,6 +327,21 @@ async def get_session(session_id: str):
 # POST /api/realtime/session  —  OpenAI Realtime ephemeral token
 # ===================================================================
 
+# ===================================================================
+# SILENT TOOLS
+# ===================================================================
+# Tools where Gideon must NOT hold a back-and-forth conversation. The
+# student thinks out loud; the AI silently maps what they say into a
+# diagram and only speaks to raise an objection/correction (injected
+# explicitly via response.create). Everything else stays quiet.
+SILENT_TOOLS = {"thought_plot", "architect"}
+
+# OpenAI Realtime (GA) model. The old `gpt-4o-realtime-preview` +
+# /v1/realtime/sessions endpoint were retired; the current flow mints an
+# ephemeral client secret via /v1/realtime/client_secrets.
+REALTIME_MODEL = os.environ.get("OPENAI_REALTIME_MODEL", "gpt-realtime")
+
+
 class RealtimeSessionRequest(BaseModel):
     voice: str = "sage"
     tool: str | None = None
@@ -334,47 +350,74 @@ class RealtimeSessionRequest(BaseModel):
 
 @app.post("/api/realtime/session")
 async def create_realtime_session(req: RealtimeSessionRequest):
-    """Create an ephemeral token for the OpenAI Realtime API.
+    """Create an ephemeral client secret for the OpenAI Realtime API.
 
-    The frontend uses this short-lived token (1-min TTL) to establish a
-    direct WebRTC connection with OpenAI — our API key never leaves the server.
+    The frontend uses this short-lived key to establish a direct WebRTC
+    connection with OpenAI — our real API key never leaves the server.
     """
     import httpx
 
     system_prompt = _build_realtime_system_prompt(req.tool, req.mode)
     tools = _build_realtime_tools()
 
+    # Voice activity detection. For silent tools we keep VAD on (so the
+    # student's speech is still transcribed for the diagram) but disable
+    # automatic response generation — otherwise the Realtime model chats
+    # back after every utterance no matter what the system prompt says.
+    # Objections are delivered only via an explicit response.create.
+    turn_detection: dict = {
+        "type": "server_vad",
+        "threshold": 0.7,
+        "prefix_padding_ms": 500,
+        "silence_duration_ms": 800,
+        "create_response": True,
+        "interrupt_response": True,
+    }
+    if req.tool in SILENT_TOOLS:
+        turn_detection["create_response"] = False
+        turn_detection["interrupt_response"] = False
+
+    # GA session schema: transcription + turn_detection live under
+    # audio.input; the spoken voice under audio.output.
+    session_config = {
+        "type": "realtime",
+        "model": REALTIME_MODEL,
+        "instructions": system_prompt,
+        "tools": tools,
+        "audio": {
+            "input": {
+                "transcription": {"model": "gpt-4o-mini-transcribe"},
+                "turn_detection": turn_detection,
+            },
+            "output": {"voice": req.voice},
+        },
+    }
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            "https://api.openai.com/v1/realtime/sessions",
+            "https://api.openai.com/v1/realtime/client_secrets",
             headers={
                 "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": "gpt-4o-realtime-preview",
-                "voice": req.voice,
-                "instructions": system_prompt,
-                "tools": tools,
-                "input_audio_transcription": {"model": "whisper-1"},
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": 0.7,
-                    "prefix_padding_ms": 500,
-                    "silence_duration_ms": 800,
-                },
-            },
+            json={"session": session_config},
             timeout=10.0,
         )
 
-        if resp.status_code != 200:
+        if resp.status_code not in (200, 201):
             logger.error("Realtime session creation failed: %s", resp.text)
             return {"error": "Failed to create realtime session"}
 
         data = resp.json()
+        # GA returns {"value": "ek_...", "expires_at": ..., "session": {...}}.
+        # Fall back to the older nested shape just in case.
+        client_secret = data.get("value") or (
+            data.get("client_secret", {}) or {}
+        ).get("value")
         return {
-            "client_secret": data["client_secret"]["value"],
-            "expires_at": data["client_secret"]["expires_at"],
+            "client_secret": client_secret,
+            "expires_at": data.get("expires_at"),
+            "model": REALTIME_MODEL,
         }
 
 
@@ -1004,84 +1047,45 @@ async def study_session_ws(websocket: WebSocket):
             # Uses the Architect Agent with web search grounding.
             # ===========================================================
             if msg_type == "transcript" and message.get("tool") == "architect":
+                # Architect is a SILENT mapping tool — it does NOT chat back.
+                # It quietly builds the architecture panel + system diagram
+                # from what the student describes, and only surfaces
+                # objections as fact-check cards. (Mirrors the realtime path.)
                 text = message.get("text", "").strip()
                 if not text:
                     continue
 
-                if _response_lock.locked():
-                    logger.debug("Skipping architect — response already in progress")
-                    continue
+                architect_history.append({"role": "user", "text": text})
 
-                try:
-                    await _response_lock.acquire()
-                    # Agent A: Fast chat response (<1s, no grounding)
-                    chat_result = await architect_agent.generate_chat(
-                        message=text,
-                        conversation_history=architect_history,
+                # Research → panel → diagram in the background (no voice)
+                asyncio.create_task(
+                    _architect_background(
+                        websocket, text, architect_history,
+                        "",  # no chat text — Architect stays silent
+                        existing_graph,
                     )
+                )
 
-                    # Update conversation history
-                    architect_history.append({"role": "user", "text": text})
-                    architect_history.append({"role": "model", "text": chat_result["text"]})
-
-                    # Cancel stale TTS before sending new response
-                    if _current_tts_task and not _current_tts_task.done():
-                        _current_tts_task.cancel()
-                    # Send text response IMMEDIATELY
-                    await websocket.send_json({
-                        "type": "ai_response",
-                        "text": chat_result["text"],
-                        "should_speak": True,
-                        "is_interrupt": False,
-                        "response_type": "explanation",
-                        "suggestions": chat_result.get("suggestions", []),
-                        "option_cards": chat_result.get("option_cards", []),
-                    })
-
-                    # Fire TTS in background
-                    _current_tts_task = asyncio.create_task(
-                        _send_tts_supplement(websocket, chat_result["text"], "architect", skip=_realtime_active)
+                # Fact-check the student's technical claims (surfaced as cards)
+                asyncio.create_task(
+                    _run_fact_check(
+                        websocket=websocket,
+                        session_id=session_id,
+                        transcript_chunk=text,
+                        router_instruction="",
+                        class_id=message.get("class_id"),
+                        topic=message.get("topic"),
+                        claim_registry=claim_registry,
+                        mode="architect",
+                        existing_graph=existing_graph,
+                        tool="architect",
                     )
+                )
 
-                    # Fire research + panel + plot in background
-                    asyncio.create_task(
-                        _architect_background(
-                            websocket, text, architect_history,
-                            chat_result["text"], existing_graph,
-                        )
-                    )
-
-                    # Fact-check the user's technical claims
-                    asyncio.create_task(
-                        _run_fact_check(
-                            websocket=websocket,
-                            session_id=session_id,
-                            transcript_chunk=text,
-                            router_instruction="",
-                            class_id=message.get("class_id"),
-                            topic=message.get("topic"),
-                            claim_registry=claim_registry,
-                            mode="architect",
-                            existing_graph=existing_graph,
-                            tool="architect",
-                        )
-                    )
-
-                except Exception:
-                    logger.exception("Architect agent failed for session %s", session_id)
-                    await websocket.send_json({
-                        "type": "ai_response",
-                        "text": "Sorry, I had trouble processing that. Could you rephrase?",
-                        "should_speak": False,
-                        "is_interrupt": False,
-                        "response_type": "explanation",
-                        "suggestions": [],
-                        "option_cards": [],
-                    })
-                finally:
-                    if _response_lock.locked():
-                        _response_lock.release()
-
+                # Store transcript
+                asyncio.create_task(
+                    _store_transcript_safe(session_id=session_id, speaker="user", text=text)
+                )
                 continue
 
             # ===========================================================
@@ -1410,6 +1414,7 @@ async def study_session_ws(websocket: WebSocket):
             # Determine which agents to run
             # ----------------------------------------------------------
             is_thought_plot = chunk.tool == "thought_plot"
+            is_silent = chunk.tool in SILENT_TOOLS
 
             # Plotter: always for thought_plot, conditional for study_buddy
             run_plotter = is_thought_plot or chunk.mode in (
@@ -1461,7 +1466,7 @@ async def study_session_ws(websocket: WebSocket):
             # Run voice generation concurrently with plotter await.
             # ----------------------------------------------------------
             voice_task: asyncio.Task | None = None
-            if router_result.get("should_respond") and not is_thought_plot:
+            if router_result.get("should_respond") and not is_silent:
                 voice_mode = _get_voice_mode(chunk.tool, chunk.mode)
                 voice_context = context
                 if chunk.mode == "language":
@@ -2282,28 +2287,59 @@ def _map_plotter_mode(study_mode: str, class_id: str | None) -> str:
     return mode_map.get(study_mode, "general")
 
 
-def _node_to_mermaid(node: dict) -> str:
+# Words Mermaid reserves — a node whose id collides with one of these
+# breaks the parse (e.g. `end` silently closes a subgraph).
+_MERMAID_RESERVED = {
+    "end", "graph", "subgraph", "class", "classdef", "click", "style",
+    "linkstyle", "direction", "flowchart", "state", "gantt", "pie",
+}
+
+
+def _safe_mermaid_id(raw: str) -> str:
+    """Coerce an arbitrary node id into a valid Mermaid identifier.
+
+    Mermaid ids must match [A-Za-z_][A-Za-z0-9_]*. LLM-produced ids often
+    contain slashes, spaces, dots or punctuation ("UI/UX Pro Max"), or
+    collide with reserved words — any of which throws a syntax error.
+    """
+    cleaned = re.sub(r"[^0-9A-Za-z_]", "_", (raw or "").strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    if not cleaned:
+        cleaned = "n"
+    if cleaned[0].isdigit() or cleaned.lower() in _MERMAID_RESERVED:
+        cleaned = f"n_{cleaned}"
+    return cleaned
+
+
+def _clean_label(raw: str) -> str:
+    """Make a label safe to sit inside a Mermaid quoted string."""
+    label = (raw or "").replace('"', "'").replace("\n", " ").strip()
+    # Angle brackets confuse the parser even inside quotes; soften them.
+    label = label.replace("<", "‹").replace(">", "›")
+    return label or "…"
+
+
+def _node_to_mermaid(node: dict, safe_id: str) -> str:
     """Render a single node in its type-appropriate Mermaid shape."""
-    nid = node.get("id", "")
-    label = node.get("label", "").replace('"', "'")
+    label = _clean_label(node.get("label", ""))
     ntype = node.get("type", "idea")
 
     if ntype == "decision":
-        return f'{nid}{{"{label}"}}'         # diamond / rhombus
+        return f'{safe_id}{{"{label}"}}'         # diamond / rhombus
     elif ntype == "system":
-        return f'{nid}[["{label}"]]'         # subroutine (double bracket)
+        return f'{safe_id}[["{label}"]]'         # subroutine (double bracket)
     elif ntype == "person":
-        return f'{nid}(["{label}"])'         # stadium
+        return f'{safe_id}(["{label}"])'         # stadium
     elif ntype == "process":
-        return f'{nid}("{label}")'           # rounded rectangle
+        return f'{safe_id}("{label}")'           # rounded rectangle
     elif ntype == "action":
-        return f'{nid}[/"{label}"\\]'        # trapezoid
+        return f'{safe_id}[/"{label}"\\]'        # trapezoid
     elif ntype == "assumption":
-        return f'{nid}(("{label}"))'         # double circle
+        return f'{safe_id}(("{label}"))'         # double circle
     elif ntype == "fact":
-        return f'{nid}["{label}"]'           # rectangle
+        return f'{safe_id}["{label}"]'           # rectangle
     else:  # idea, concept, etc.
-        return f'{nid}("{label}")'           # rounded rectangle
+        return f'{safe_id}("{label}")'           # rounded rectangle
 
 
 def _graph_to_mermaid(graph: dict) -> str:
@@ -2342,50 +2378,67 @@ def _graph_to_mermaid(graph: dict) -> str:
     lines.append("  classDef idea fill:#b86e7e,stroke:#7e3a4a,color:#faf9f5,rx:12,ry:12")
     lines.append("  classDef incorrect fill:#ef4444,stroke:#7f1d1d,color:#faf9f5,rx:12,ry:12,stroke-width:3px,stroke-dasharray:5")
 
+    # Build a raw-id → safe-id map so nodes, clusters, edges and class
+    # statements all reference the exact same sanitized identifier.
+    id_map: dict[str, str] = {}
+    used_safe: set[str] = set()
+    for node in nodes:
+        raw = node.get("id", "")
+        safe = _safe_mermaid_id(raw)
+        base, i = safe, 2
+        while safe in used_safe:               # two raw ids may collapse
+            safe = f"{base}_{i}"
+            i += 1
+        used_safe.add(safe)
+        id_map[raw] = safe
+
+    node_map: dict[str, dict] = {n.get("id", ""): n for n in nodes}
+
     clustered_node_ids: set[str] = set()
     for cluster in clusters:
         for nid in cluster.get("node_ids", []):
             clustered_node_ids.add(nid)
 
-    node_map: dict[str, dict] = {n["id"]: n for n in nodes}
-
-    for cluster in clusters:
-        cid = cluster.get("id", "")
-        clabel = cluster.get("label", "").replace('"', "'")
+    for ci, cluster in enumerate(clusters):
+        cid = _safe_mermaid_id(cluster.get("id", "") or f"cluster_{ci}")
+        clabel = _clean_label(cluster.get("label", ""))
+        member_lines = [
+            f"    {_node_to_mermaid(node_map[nid], id_map[nid])}"
+            for nid in cluster.get("node_ids", [])
+            if nid in node_map and nid in id_map
+        ]
+        if not member_lines:                   # empty subgraph is a parse error
+            continue
         lines.append(f'  subgraph {cid}["{clabel}"]')
-        for nid in cluster.get("node_ids", []):
-            node = node_map.get(nid)
-            if node:
-                lines.append(f"    {_node_to_mermaid(node)}")
+        lines.extend(member_lines)
         lines.append("  end")
 
     for node in nodes:
-        if node.get("id") not in clustered_node_ids:
-            lines.append(f"  {_node_to_mermaid(node)}")
+        raw = node.get("id", "")
+        if raw not in clustered_node_ids:
+            lines.append(f"  {_node_to_mermaid(node, id_map[raw])}")
 
     for edge in edges:
-        src = edge.get("from", "")
-        dst = edge.get("to", "")
-        label = edge.get("label", "").replace('"', "'")
+        src_raw = edge.get("from", "")
+        dst_raw = edge.get("to", "")
+        # Drop dangling edges — both endpoints must be real, mapped nodes.
+        if src_raw not in id_map or dst_raw not in id_map:
+            continue
+        src, dst = id_map[src_raw], id_map[dst_raw]
+        label = _clean_label(edge.get("label", "")) if edge.get("label") else ""
         style = edge.get("style", "solid")
 
         if style in ("dashed", "dotted"):
-            if label:
-                lines.append(f'  {src} -. "{label}" .-> {dst}')
-            else:
-                lines.append(f"  {src} -.-> {dst}")
+            lines.append(f'  {src} -. "{label}" .-> {dst}' if label else f"  {src} -.-> {dst}")
         else:
-            if label:
-                lines.append(f'  {src} -->|"{label}"| {dst}')
-            else:
-                lines.append(f"  {src} --> {dst}")
+            lines.append(f'  {src} -->|"{label}"| {dst}' if label else f"  {src} --> {dst}")
 
     valid_types = {"process", "decision", "action", "fact", "assumption", "system", "person", "idea"}
     for node in nodes:
         ntype = node.get("type", "idea")
-        nid = node.get("id", "")
-        if ntype in valid_types:
-            lines.append(f"  class {nid} {ntype}")
+        raw = node.get("id", "")
+        if ntype in valid_types and raw in id_map:
+            lines.append(f"  class {id_map[raw]} {ntype}")
 
     return "\n".join(lines)
 
