@@ -1,9 +1,45 @@
-const { app, BrowserWindow, ipcMain, systemPreferences, globalShortcut, desktopCapturer, session, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, systemPreferences, globalShortcut, desktopCapturer, session, screen, Tray, Menu, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
 
 let win = null;
+let tray = null;
 let clickThrough = false;
+
+function positionUnderTray() {
+  if (!win) return;
+  const b = win.getBounds();
+  let x, y;
+  if (tray) {
+    const t = tray.getBounds();
+    x = Math.round(t.x + t.width / 2 - b.width / 2);
+    y = Math.round(t.y + t.height + 6);
+  } else {
+    const wa = screen.getPrimaryDisplay().workArea;
+    x = wa.x + wa.width - b.width - 24; y = wa.y + 8;
+  }
+  const wa = screen.getPrimaryDisplay().workArea;
+  x = Math.max(wa.x + 6, Math.min(x, wa.x + wa.width - b.width - 6));
+  win.setPosition(x, y, false);
+}
+function showWin() { if (!win) return; positionUnderTray(); win.show(); win.focus(); }
+function toggleWin() { if (!win) return; if (win.isVisible()) win.hide(); else showWin(); }
+
+function createTray() {
+  const img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'trayTemplate.png'));
+  img.setTemplateImage(true);
+  tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
+  tray.setToolTip('Gideon — click to show, ⌘\\ to toggle');
+  const menu = Menu.buildFromTemplate([
+    { label: 'Show / Hide', accelerator: 'CommandOrControl+\\', click: toggleWin },
+    { label: 'Start / Stop Listening', accelerator: 'CommandOrControl+Shift+L', click: () => win && win.webContents.send('hotkey-listen') },
+    { label: 'Ask Gideon…', accelerator: 'CommandOrControl+Shift+A', click: () => { showWin(); win.webContents.send('hotkey-ask'); } },
+    { type: 'separator' },
+    { label: 'Quit Gideon', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
+  ]);
+  tray.on('click', toggleWin);
+  tray.on('right-click', () => tray.popUpContextMenu(menu));
+}
 
 // ── Meeting detection (Granola-style) ──
 let meetingActive = false;
@@ -99,9 +135,11 @@ async function ensureMic() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === 'darwin' && app.dock) app.dock.hide(); // live in the menu bar
   wireDisplayMedia();
   await ensureMic();
   createWindow();
+  createTray();
 
   // Global hotkeys
   globalShortcut.register('CommandOrControl+\\', () => {

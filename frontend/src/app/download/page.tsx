@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Mic, Network, ShieldCheck, Apple, ArrowLeft, Download, Cpu, MessageSquare, EyeOff, Sparkles } from 'lucide-react';
 
-const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.2.1/Gideon.Listener-0.2.1-arm64.dmg';
+const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.2.2/Gideon.Listener-0.2.2-arm64.dmg';
 
 const FEATURES = [
   { icon: Sparkles, title: 'Knows when you’re in a meeting', desc: 'Join a Meet, Zoom, or Teams call and Gideon pops up “Take notes” — one click captures the whole thing.' },
@@ -38,7 +38,7 @@ export default function DownloadPage() {
           <a href={DMG_URL} className="dl-btn">
             <Download size={18} /> Download for macOS
           </a>
-          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.2.1 · 94 MB</span>
+          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.2.2 · 94 MB</span>
         </div>
 
         <div className="dl-note">

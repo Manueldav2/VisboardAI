@@ -1,7 +1,7 @@
 {
   "name": "gideon-listener",
   "productName": "Gideon Listener",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Turn on Gideon before a meeting — it listens and maps your thinking live.",
   "main": "main.js",
   "author": "Manuel David",
@@ -33,7 +33,9 @@
       ],
       "icon": "renderer/icon.png",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Gideon listens to your voice to build live thought maps."
+        "LSUIElement": 1,
+        "NSMicrophoneUsageDescription": "Gideon listens to your voice to build live thought maps.",
+        "NSScreenCaptureUsageDescription": "Gideon captures system audio so it can hear the whole meeting."
       }
     },
     "win": {
