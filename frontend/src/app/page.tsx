@@ -88,7 +88,11 @@ export default function GideonPage() {
             if (d.graph?.mermaid_code) setMermaidCode(d.graph.mermaid_code);
             break;
           case 'fact_check': {
-            const ok = d.status === 'incorrect' || (d.status === 'assumption' && (d.confidence || 0) >= 0.6);
+            // In Architecture mode the user is describing their OWN design —
+            // don't flag design intent as "worth checking"; only surface real
+            // technical errors. Elsewhere, keep high-confidence assumptions.
+            const isArch = modeRef.current?.id === 'architect';
+            const ok = d.status === 'incorrect' || (!isArch && d.status === 'assumption' && (d.confidence || 0) >= 0.65);
             if (ok && d.status !== 'verified') {
               setFlags(p => [{ id: crypto.randomUUID(), status: d.status, claim: d.claim || '', correction: d.correction || '', explanation: d.explanation || '' }, ...p].slice(0, 40));
             }
