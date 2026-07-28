@@ -9,32 +9,33 @@
 <body>
   <!-- Collapsed pill -->
   <button id="pill" class="pill" title="Open Gideon">
-    <span class="pill-logo">◒</span>
+    <span class="pill-logo" data-icon="logo"></span>
     <span id="pill-dots" class="pill-dots"><i></i><i></i><i></i></span>
   </button>
 
-  <!-- Meeting-detected toast -->
+  <!-- Meeting toast -->
   <div id="mbanner" class="mbanner hidden">
-    <span class="mb-icon">◒</span>
+    <span class="mb-icon" data-icon="logo"></span>
     <div class="mb-text"><b>Meeting detected</b><span id="mb-app">a meeting</span></div>
     <button id="mb-take" class="mb-take">Take notes</button>
-    <button id="mb-x" class="mb-x">×</button>
+    <button id="mb-x" class="mb-x" data-icon="close"></button>
   </div>
 
   <div class="shell">
     <header class="titlebar">
-      <div class="brand"><span class="logo">◒</span></div>
+      <button id="library-btn" class="wbtn" title="All notes" data-icon="list"></button>
+      <div class="brand"><span class="logo" data-icon="logo"></span></div>
       <div id="rec" class="rec hidden"><span class="rec-dot"></span><span id="rec-time">0:00</span></div>
       <div class="win-ctl">
-        <button id="stealth" class="wbtn on" title="Hidden from screen share">◉</button>
-        <button id="collapse" class="wbtn" title="Collapse to pill">–</button>
-        <button id="close" class="wbtn danger" title="Quit">×</button>
+        <button id="stealth" class="wbtn on" title="Hidden from screen share" data-icon="eye"></button>
+        <button id="collapse" class="wbtn" title="Collapse to pill" data-icon="collapse"></button>
+        <button id="close" class="wbtn danger" title="Quit" data-icon="close"></button>
       </div>
     </header>
 
     <!-- Note header -->
     <div class="note-head">
-      <div id="title" class="note-title" contenteditable="true" data-ph="New note"></div>
+      <div id="title" class="note-title" contenteditable="true" data-ph="Untitled note"></div>
       <div class="note-meta"><span id="meta-date">Today</span><span class="dotsep">·</span><span id="meta-you">Me</span></div>
     </div>
 
@@ -47,27 +48,24 @@
     </nav>
 
     <main class="content">
-      <!-- NOTES -->
       <section id="v-notes" class="view on">
         <div class="notes-toolbar">
           <div class="seg2">
             <button id="tg-mine" class="seg2-btn on">My notes</button>
             <button id="tg-enh" class="seg2-btn">Enhanced</button>
           </div>
-          <button id="enhance" class="enhance" title="Enhance with AI">✨ Enhance</button>
+          <button id="enhance" class="enhance" title="Enhance with AI"><span data-icon="enhance"></span>Enhance</button>
         </div>
         <div id="editor" class="editor" contenteditable="true" data-ph="Jot rough notes — Gideon fills in the rest from the conversation."></div>
         <div id="enhanced" class="enhanced hidden"></div>
       </section>
 
-      <!-- TRANSCRIPT -->
       <section id="v-transcript" class="view">
         <div class="view-head"><span>Transcript</span><button id="export" class="mini">Export</button></div>
         <div id="transcript" class="transcript"></div>
         <div id="transcript-empty" class="view-empty">Everything said shows up here — attributed and saved.</div>
       </section>
 
-      <!-- MAP -->
       <section id="v-map" class="view">
         <div class="view-head">
           <div class="modes" id="modes">
@@ -81,14 +79,12 @@
         <div id="insights" class="insights"></div>
       </section>
 
-      <!-- TERMS -->
       <section id="v-terms" class="view">
-        <div class="view-head"><span>Terms & jargon</span></div>
+        <div class="view-head"><span>Terms &amp; jargon</span></div>
         <div id="terms" class="terms"></div>
         <div id="terms-empty" class="view-empty">Acronyms &amp; jargon (CAC, LP, ARR…) get explained here as they’re said.</div>
       </section>
 
-      <!-- CHAT -->
       <section id="v-chat" class="view">
         <div class="view-head"><span>Chat with this meeting</span></div>
         <div id="asks" class="asks"></div>
@@ -98,7 +94,7 @@
 
     <form id="ask-form" class="ask">
       <input id="ask-input" class="ask-input" placeholder="Ask anything…" />
-      <button type="submit" class="ask-send" title="Ask">↑</button>
+      <button type="submit" class="ask-send" title="Ask" data-icon="send"></button>
     </form>
 
     <footer class="dock">
@@ -109,8 +105,20 @@
         <option value="system">System only</option>
       </select>
       <div id="status" class="status">Ready</div>
-      <button id="new" class="wbtn" title="New note">＋</button>
+      <button id="new" class="wbtn" title="New note" data-icon="plus"></button>
     </footer>
+
+    <!-- Library overlay -->
+    <div id="library" class="library hidden">
+      <div class="lib-head">
+        <button id="lib-back" class="wbtn" title="Back" data-icon="back"></button>
+        <span class="lib-title">All notes</span>
+        <button id="lib-new" class="lib-new"><span data-icon="plus"></span>New</button>
+      </div>
+      <div class="lib-search"><span data-icon="search"></span><input id="lib-search-input" placeholder="Search notes…" /></div>
+      <div id="lib-list" class="lib-list"></div>
+      <div id="lib-empty" class="view-empty">Your past notes will live here. Start listening to make your first one.</div>
+    </div>
   </div>
 
   <script src="mermaid.min.js"></script>

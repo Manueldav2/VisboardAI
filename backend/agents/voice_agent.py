@@ -437,11 +437,14 @@ async def generate_title(transcript: str, notes: str = "") -> str:
             model=MODEL,
             contents=(
                 f"{src[:4000]}\n\n"
-                "Give a concise, specific title for this conversation in 3-6 words. "
+                "Give a concise, specific title for this conversation in 3-6 words, "
+                "based ONLY on what is actually said above. Do not invent a topic or "
+                "meeting type that isn't there — if it's just small talk or a brief "
+                "note, title it plainly (e.g. 'Quick Personal Check-in'). "
                 "No quotes, no punctuation at the end, Title Case. Return ONLY the title."
             ),
             config=genai.types.GenerateContentConfig(
-                temperature=0.3, max_output_tokens=30,
+                temperature=0.2, max_output_tokens=30,
                 thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
             ),
         )
@@ -458,12 +461,26 @@ async def enhance_notes(transcript: str, notes: str = "", title: str = "") -> st
         return ""
     sys = (
         "You are Gideon, an elite meeting note-taker. Turn the transcript into "
-        "clean, skimmable notes in Markdown. Weave in what the user jotted (it "
-        "signals what matters to them). Use these sections, omitting any that are "
-        "empty:\n\n## TL;DR (2-3 sentences)\n## Key points (bullets)\n"
-        "## Decisions (bullets)\n## Action items (bullets, '- [ ] owner — task')\n"
-        "## Open questions (bullets)\n\nBe concise and specific. Use the real "
-        "names/terms from the transcript. No preamble, no 'here are your notes'."
+        "clean, skimmable notes in Markdown.\n\n"
+        "ABSOLUTE RULE — GROUND EVERYTHING IN THE TRANSCRIPT:\n"
+        "- Only write things that were ACTUALLY said. Never invent decisions, "
+        "action items, owners, names, teams, metrics, goals, or topics. If it is "
+        "not in the transcript or the user's notes, it does not go in the notes.\n"
+        "- Do NOT infer a 'type' of meeting and fill in what such a meeting would "
+        "typically cover. No plausible-sounding filler.\n"
+        "- A section that has no real content is OMITTED entirely. Do not pad with "
+        "generic bullets to make it look complete.\n"
+        "- If the transcript is short, casual, rambling, or has no substantive "
+        "discussion, just write a one-line '## TL;DR' that literally reflects what "
+        "was said (e.g. 'Brief personal check-in; mentioned ARR is high.') and stop "
+        "there. Never manufacture a business meeting out of small talk.\n\n"
+        "Weave in what the user jotted (it signals what matters to them). Use these "
+        "sections, INCLUDING ONLY the ones with real content:\n\n"
+        "## TL;DR (1-3 sentences)\n## Key points (bullets)\n## Decisions (bullets)\n"
+        "## Action items (bullets, '- [ ] owner — task' — only if an owner+task was "
+        "actually stated)\n## Open questions (bullets — only questions actually "
+        "raised)\n\nBe concise and specific. Use the real names/terms from the "
+        "transcript. No preamble, no 'here are your notes'."
     )
     user = (
         (f"# {title}\n\n" if title.strip() else "")
@@ -476,7 +493,7 @@ async def enhance_notes(transcript: str, notes: str = "", title: str = "") -> st
             contents=user,
             config=genai.types.GenerateContentConfig(
                 system_instruction=sys,
-                temperature=0.3,
+                temperature=0.15,
                 max_output_tokens=1600,
                 thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
             ),

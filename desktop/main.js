@@ -100,14 +100,16 @@ function expandWin() {
   if (!win || expanded) return;
   expanded = true;
   win.setResizable(false);
-  win.setBounds(anchorRight(PANEL), true);
+  // Resize instantly (no animated grow = no clipped-content flash); the
+  // renderer animates the panel in via CSS for smoothness.
+  win.setBounds(anchorRight(PANEL), false);
   win.webContents.send('view', 'panel');
   win.focus();
 }
 function collapseWin() {
   if (!win || !expanded) return;
   expanded = false;
-  win.setBounds(anchorRight(PILL), true);
+  win.setBounds(anchorRight(PILL), false);
   win.webContents.send('view', 'pill');
 }
 
@@ -198,3 +200,17 @@ ipcMain.handle('minimize-app', () => win && win.hide());
 ipcMain.handle('expand', () => expandWin());
 ipcMain.handle('collapse', () => collapseWin());
 ipcMain.handle('dismiss-meeting', (_e, name) => { dismissedFor = name; });
+
+// ── Manual pill drag (smooth, and lets us tell a drag from a click) ──
+let dragOrigin = null;
+ipcMain.handle('drag-start', () => { if (win) { const b = win.getBounds(); dragOrigin = { x: b.x, y: b.y }; } });
+ipcMain.handle('drag-move', (_e, dx, dy) => {
+  if (!win || !dragOrigin) return;
+  const wa = screen.getDisplayNearestPoint({ x: dragOrigin.x + dx, y: dragOrigin.y + dy }).workArea;
+  const b = win.getBounds();
+  let x = dragOrigin.x + dx, y = dragOrigin.y + dy;
+  x = Math.max(wa.x, Math.min(x, wa.x + wa.width - b.width));
+  y = Math.max(wa.y, Math.min(y, wa.y + wa.height - b.height));
+  win.setPosition(Math.round(x), Math.round(y), false);
+});
+ipcMain.handle('drag-end', () => { dragOrigin = null; });

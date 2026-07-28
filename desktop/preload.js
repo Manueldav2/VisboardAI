@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('gideon', {
   onMeetingDetected: (cb) => ipcRenderer.on('meeting-detected', (_e, name) => cb(name)),
   onMeetingCleared: (cb) => ipcRenderer.on('meeting-cleared', cb),
   dismissMeeting: (name) => ipcRenderer.invoke('dismiss-meeting', name),
+  dragStart: () => ipcRenderer.invoke('drag-start'),
+  dragMove: (dx, dy) => ipcRenderer.invoke('drag-move', dx, dy),
+  dragEnd: () => ipcRenderer.invoke('drag-end'),
 });
