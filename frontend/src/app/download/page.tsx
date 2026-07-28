@@ -3,16 +3,15 @@
 import Link from 'next/link';
 import { Mic, Network, ShieldCheck, Apple, ArrowLeft, Download, Cpu, MessageSquare, EyeOff, Sparkles } from 'lucide-react';
 
-const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.2.2/Gideon.Listener-0.2.2-arm64.dmg';
+const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.3.0/Gideon.Listener-0.3.0-arm64.dmg';
 
 const FEATURES = [
-  { icon: Sparkles, title: 'Knows when you’re in a meeting', desc: 'Join a Meet, Zoom, or Teams call and Gideon pops up “Take notes” — one click captures the whole thing.' },
-  { icon: Mic, title: 'Hears the whole room', desc: 'Captures your mic and system audio, so it maps the whole meeting — attributing who said what.' },
-  { icon: Network, title: 'Live thought map', desc: 'Everything said becomes a growing Mermaid diagram in real time — Notes, Architecture, or Debate.' },
-  { icon: MessageSquare, title: 'Ask it anything', desc: 'A copilot over the conversation: “what should I say?”, “summarize this” — instant answers.' },
-  { icon: ShieldCheck, title: 'Catches fallacies & bad facts', desc: 'Flags logical fallacies and shaky claims live, as they’re said.' },
-  { icon: EyeOff, title: 'Hidden from screen shares', desc: 'The overlay floats on top but is invisible to Zoom, Meet, and screen recording.' },
-  { icon: Cpu, title: 'Zero setup', desc: 'Transcription, mapping, and answers just work — no API keys, no config, nothing to install.' },
+  { icon: Sparkles, title: 'It writes your notes for you', desc: 'Jot a few rough bullets — Gideon hears the whole meeting and Enhances them into clean notes: TL;DR, key points, decisions, action items.' },
+  { icon: Mic, title: 'Hears the whole room', desc: 'Captures your mic and system audio — no bot joins the call — and attributes who said what.' },
+  { icon: MessageSquare, title: 'Chat with your meeting', desc: '“Summarize this”, “what were the action items?”, “what should I say?” — instant answers over the transcript.' },
+  { icon: Network, title: 'Live thought map', desc: 'The conversation also becomes a growing diagram in real time — something no other notepad does.' },
+  { icon: ShieldCheck, title: 'Explains jargon & catches fallacies', desc: 'Defines acronyms as they’re said (CAC, LP, ARR…) and flags logical fallacies and shaky claims live.' },
+  { icon: EyeOff, title: 'Menu bar + hidden from screen shares', desc: 'Lives in your menu bar as a pill; the overlay floats on top but is invisible to Zoom, Meet, and recording.' },
 ];
 
 export default function DownloadPage() {
@@ -38,7 +37,7 @@ export default function DownloadPage() {
           <a href={DMG_URL} className="dl-btn">
             <Download size={18} /> Download for macOS
           </a>
-          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.2.2 · 94 MB</span>
+          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.3.0 · 94 MB</span>
         </div>
 
         <div className="dl-note">
@@ -68,7 +67,7 @@ export default function DownloadPage() {
           <li><span>3</span> It transcribes and draws your thinking as a live diagram — corrections included.</li>
         </ol>
         <p className="dl-foot">
-          Windows build, per-meeting saved notes, and code-signing are coming next. Global hotkeys: ⌘\ hide · ⌘⇧L listen · ⌘⇧A ask.
+          Windows build, meeting history, and code-signing are coming next. Global hotkeys: ⌘\ hide · ⌘⇧L listen · ⌘⇧A ask.
         </p>
       </section>
     </div>

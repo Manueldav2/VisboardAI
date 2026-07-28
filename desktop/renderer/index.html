@@ -7,7 +7,13 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Meeting-detected toast (Granola-style) -->
+  <!-- Collapsed pill -->
+  <button id="pill" class="pill" title="Open Gideon">
+    <span class="pill-logo">◒</span>
+    <span id="pill-dots" class="pill-dots"><i></i><i></i><i></i></span>
+  </button>
+
+  <!-- Meeting-detected toast -->
   <div id="mbanner" class="mbanner hidden">
     <span class="mb-icon">◒</span>
     <div class="mb-text"><b>Meeting detected</b><span id="mb-app">a meeting</span></div>
@@ -16,59 +22,94 @@
   </div>
 
   <div class="shell">
-    <!-- Title bar -->
     <header class="titlebar">
-      <div class="brand"><span class="logo">◒</span><span class="wordmark">Gideon</span></div>
-      <div class="modes" id="modes">
-        <button class="chip on" data-tool="thought_plot">Notes</button>
-        <button class="chip" data-tool="architect">Architect</button>
-        <button class="chip" data-tool="argument_ref">Debate</button>
-      </div>
+      <div class="brand"><span class="logo">◒</span></div>
+      <div id="rec" class="rec hidden"><span class="rec-dot"></span><span id="rec-time">0:00</span></div>
       <div class="win-ctl">
         <button id="stealth" class="wbtn on" title="Hidden from screen share">◉</button>
-        <button id="min" class="wbtn" title="Hide (⌘\\)">–</button>
+        <button id="collapse" class="wbtn" title="Collapse to pill">–</button>
         <button id="close" class="wbtn danger" title="Quit">×</button>
       </div>
     </header>
 
-    <!-- Stage: live map -->
-    <main class="stage">
-      <div id="map" class="map"></div>
-      <div id="empty" class="empty">
-        <div class="orb">◒</div>
-        <p id="empty-text">Press <b>Listen</b> — Gideon hears the room and maps the thinking live.</p>
-        <p id="interim" class="interim"></p>
-      </div>
+    <!-- Note header -->
+    <div class="note-head">
+      <div id="title" class="note-title" contenteditable="true" data-ph="New note"></div>
+      <div class="note-meta"><span id="meta-date">Today</span><span class="dotsep">·</span><span id="meta-you">Me</span></div>
+    </div>
 
-      <!-- Copilot answer (overlays on ask) -->
-      <div id="answer" class="answer hidden">
-        <div class="answer-head"><span>Gideon</span><button id="answer-close">×</button></div>
-        <div id="answer-body" class="answer-body"></div>
-      </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab on" data-tab="notes">Notes</button>
+      <button class="tab" data-tab="transcript">Transcript<span class="badge" id="b-transcript"></span></button>
+      <button class="tab" data-tab="map">Map</button>
+      <button class="tab" data-tab="terms">Terms<span class="badge" id="b-terms"></span></button>
+      <button class="tab" data-tab="chat">Chat</button>
+    </nav>
+
+    <main class="content">
+      <!-- NOTES -->
+      <section id="v-notes" class="view on">
+        <div class="notes-toolbar">
+          <div class="seg2">
+            <button id="tg-mine" class="seg2-btn on">My notes</button>
+            <button id="tg-enh" class="seg2-btn">Enhanced</button>
+          </div>
+          <button id="enhance" class="enhance" title="Enhance with AI">✨ Enhance</button>
+        </div>
+        <div id="editor" class="editor" contenteditable="true" data-ph="Jot rough notes — Gideon fills in the rest from the conversation."></div>
+        <div id="enhanced" class="enhanced hidden"></div>
+      </section>
+
+      <!-- TRANSCRIPT -->
+      <section id="v-transcript" class="view">
+        <div class="view-head"><span>Transcript</span><button id="export" class="mini">Export</button></div>
+        <div id="transcript" class="transcript"></div>
+        <div id="transcript-empty" class="view-empty">Everything said shows up here — attributed and saved.</div>
+      </section>
+
+      <!-- MAP -->
+      <section id="v-map" class="view">
+        <div class="view-head">
+          <div class="modes" id="modes">
+            <button class="chip on" data-tool="thought_plot">Notes</button>
+            <button class="chip" data-tool="architect">Architect</button>
+            <button class="chip" data-tool="argument_ref">Debate</button>
+          </div>
+        </div>
+        <div id="map" class="map"></div>
+        <div id="map-empty" class="view-empty map-empty">Talk and your thinking becomes a live diagram.</div>
+        <div id="insights" class="insights"></div>
+      </section>
+
+      <!-- TERMS -->
+      <section id="v-terms" class="view">
+        <div class="view-head"><span>Terms & jargon</span></div>
+        <div id="terms" class="terms"></div>
+        <div id="terms-empty" class="view-empty">Acronyms &amp; jargon (CAC, LP, ARR…) get explained here as they’re said.</div>
+      </section>
+
+      <!-- CHAT -->
+      <section id="v-chat" class="view">
+        <div class="view-head"><span>Chat with this meeting</span></div>
+        <div id="asks" class="asks"></div>
+        <div id="chat-empty" class="view-empty">Ask anything — “summarize this”, “what were the action items?”, “what should I say?”</div>
+      </section>
     </main>
 
-    <!-- Insights (fallacies / fact-checks) -->
-    <section id="insights" class="insights hidden"></section>
-
-    <!-- Transcript drawer -->
-    <section id="transcript" class="transcript hidden"></section>
-
-    <!-- Copilot ask bar -->
     <form id="ask-form" class="ask">
-      <input id="ask-input" class="ask-input" placeholder="Ask Gideon anything about the conversation…" />
-      <button type="submit" class="ask-send" title="Ask (⌘⇧A)">↑</button>
+      <input id="ask-input" class="ask-input" placeholder="Ask anything…" />
+      <button type="submit" class="ask-send" title="Ask">↑</button>
     </form>
 
-    <!-- Dock -->
     <footer class="dock">
       <button id="listen" class="listen"><span class="dot"></span><span id="listen-label">Listen</span></button>
       <select id="source" class="source" title="Audio source">
-        <option value="mic">Mic only</option>
         <option value="both">Mic + System</option>
+        <option value="mic">Mic only</option>
         <option value="system">System only</option>
       </select>
       <div id="status" class="status">Ready</div>
-      <button id="toggle-notes" class="wbtn" title="Transcript">☰</button>
+      <button id="new" class="wbtn" title="New note">＋</button>
     </footer>
   </div>
 

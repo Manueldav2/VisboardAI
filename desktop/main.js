@@ -71,6 +71,7 @@ function checkMeeting() {
       meetingActive = true;
       if (dismissedFor !== name) {
         if (!win.isVisible()) win.showInactive();
+        expandWin();
         win.webContents.send('meeting-detected', name);
       }
     } else if (!isMeeting && meetingActive) {
@@ -81,26 +82,53 @@ function checkMeeting() {
   });
 }
 
+const PILL = { width: 74, height: 138 };
+const PANEL = { width: 440, height: 640 };
+let expanded = false;
+
+function anchorRight(size) {
+  // Keep the window's top-right corner fixed while it grows/shrinks.
+  const b = win.getBounds();
+  const rightEdge = b.x + b.width, top = b.y;
+  const wa = screen.getPrimaryDisplay().workArea;
+  let x = Math.round(rightEdge - size.width);
+  x = Math.max(wa.x + 6, Math.min(x, wa.x + wa.width - size.width - 6));
+  const y = Math.max(wa.y + 4, Math.min(top, wa.y + wa.height - size.height - 6));
+  return { x, y, width: size.width, height: size.height };
+}
+function expandWin() {
+  if (!win || expanded) return;
+  expanded = true;
+  win.setResizable(false);
+  win.setBounds(anchorRight(PANEL), true);
+  win.webContents.send('view', 'panel');
+  win.focus();
+}
+function collapseWin() {
+  if (!win || !expanded) return;
+  expanded = false;
+  win.setBounds(anchorRight(PILL), true);
+  win.webContents.send('view', 'pill');
+}
+
 function createWindow() {
-  const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
+  const wa = screen.getPrimaryDisplay().workArea;
   win = new BrowserWindow({
-    width: 440,
-    height: 640,
-    x: sw - 470,
-    y: 40,
-    minWidth: 360,
-    minHeight: 420,
+    width: PILL.width,
+    height: PILL.height,
+    x: wa.x + wa.width - PILL.width - 22,
+    y: wa.y + 8,
     title: 'Gideon',
     frame: false,
     transparent: true,
     hasShadow: true,
-    resizable: true,
+    resizable: false,
     vibrancy: 'under-window',
     visualEffectState: 'active',
     backgroundColor: '#00000000',
     show: false,
     alwaysOnTop: true,
-    skipTaskbar: false,
+    skipTaskbar: true,
     fullscreenable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -167,4 +195,6 @@ ipcMain.handle('set-click-through', (_e, v) => {
 });
 ipcMain.handle('close-app', () => app.quit());
 ipcMain.handle('minimize-app', () => win && win.hide());
+ipcMain.handle('expand', () => expandWin());
+ipcMain.handle('collapse', () => collapseWin());
 ipcMain.handle('dismiss-meeting', (_e, name) => { dismissedFor = name; });
