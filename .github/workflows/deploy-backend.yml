@@ -14,14 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # GitHub runners no longer ship the Heroku CLI that the deploy action needs.
-      - name: Install Heroku CLI
-        run: curl https://cli-assets.heroku.com/install.sh | sh
-
-      - name: Deploy to Heroku
-        uses: akhileshns/heroku-deploy@v3.13.15
-        with:
-          heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-          heroku_app_name: thought-plot-backend
-          heroku_email: manueldavid500@gmail.com
-          appdir: backend
+      # Push the backend/ subdir to Heroku's git over HTTPS with the API key.
+      # (The heroku-deploy action fights the current Heroku CLI, and runners no
+      # longer ship the CLI — this needs neither.)
+      - name: Deploy backend to Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          cd backend
+          git init -q
+          git config user.email "ci@github"
+          git config user.name "github-actions"
+          git add -A
+          git commit -q -m "deploy ${GITHUB_SHA}"
+          git push -f "https://heroku:${HEROKU_API_KEY}@git.heroku.com/thought-plot-backend.git" HEAD:main
