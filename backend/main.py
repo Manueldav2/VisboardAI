@@ -798,6 +798,16 @@ async def study_session_ws(websocket: WebSocket):
                     "speaker": speaker,
                 })
 
+                # Explain any jargon/abbreviations (CAC, LP, ARR…) in the background.
+                async def _terms():
+                    try:
+                        terms = await voice_agent.extract_terms(text)
+                        if terms:
+                            await websocket.send_json({"type": "terms", "terms": terms})
+                    except Exception:
+                        logger.debug("terms send failed", exc_info=True)
+                asyncio.create_task(_terms())
+
                 # Attribute speech to whoever said it (desktop passes a label).
                 plot_text = f"{speaker}: {text}" if speaker else text
 

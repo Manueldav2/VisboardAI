@@ -376,6 +376,57 @@ async def answer_question(question: str, context: str = "") -> str:
         return "I couldn't answer that just now — try again."
 
 
+_TERMS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "terms": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "term": {"type": "string"},
+                    "definition": {"type": "string"},
+                },
+                "required": ["term", "definition"],
+            },
+        }
+    },
+    "required": ["terms"],
+}
+
+
+async def extract_terms(text: str) -> list[dict]:
+    """Pull out abbreviations / acronyms / jargon a listener might not know
+    and define each in one line (CAC, LP, ARR, TAM, SDK, etc.). [] if none."""
+    if not text or len(text) < 8:
+        return []
+    try:
+        response = await _client.aio.models.generate_content(
+            model=MODEL,
+            contents=(
+                f"Transcript: {text}\n\n"
+                "List any abbreviations, acronyms, or specialized jargon a general "
+                "listener might not know (business, finance, tech, legal, medical — "
+                "e.g. CAC, LP, ARR, TAM, EBITDA, SDK). For each give a concise "
+                "one-sentence definition in this context. Ignore common words and "
+                "proper names. Return an empty list if there are none."
+            ),
+            config=genai.types.GenerateContentConfig(
+                temperature=0,
+                max_output_tokens=700,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
+                response_mime_type="application/json",
+                response_schema=_TERMS_SCHEMA,
+            ),
+        )
+        import json as _json
+        data = _json.loads(response.text or "{}")
+        return [t for t in data.get("terms", []) if t.get("term") and t.get("definition")]
+    except Exception:
+        logger.debug("term extraction failed", exc_info=True)
+        return []
+
+
 async def generate_tts(text: str, mode: str = "general") -> bytes | None:
     """Standalone TTS — generate audio from text. Used as background supplement.
 
