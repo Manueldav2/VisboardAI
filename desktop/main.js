@@ -1,8 +1,49 @@
 const { app, BrowserWindow, ipcMain, systemPreferences, globalShortcut, desktopCapturer, session, screen } = require('electron');
+const { execFile } = require('child_process');
 const path = require('path');
 
 let win = null;
 let clickThrough = false;
+
+// ── Meeting detection (Granola-style) ──
+let meetingActive = false;
+let dismissedFor = null;
+const OSA = [
+  'tell application "System Events"',
+  'set fa to name of first application process whose frontmost is true',
+  'try',
+  'set wt to name of front window of (first application process whose frontmost is true)',
+  'on error',
+  'set wt to ""',
+  'end try',
+  'end tell',
+  'return fa & "|||" & wt',
+];
+function checkMeeting() {
+  if (process.platform !== 'darwin' || !win) return;
+  const args = [];
+  OSA.forEach((l) => { args.push('-e', l); });
+  execFile('osascript', args, { timeout: 4000 }, (err, stdout) => {
+    if (err) return; // no Accessibility permission — skip silently
+    const hay = String(stdout || '').trim().toLowerCase().replace('|||', ' ');
+    const isMeeting =
+      /zoom\.us|zoom meeting|meet\.google|google meet|hangouts call|microsoft teams|teams meeting|webex|whereby|gather\.town|around\.co|huddle|riverside\.fm/.test(hay) ||
+      /\bmeet\b\s*[\-–—·]/.test(hay) || /[\-–—·]\s*meet\b/.test(hay);
+    const name = /zoom/.test(hay) ? 'Zoom' : /teams/.test(hay) ? 'Microsoft Teams'
+      : /webex/.test(hay) ? 'Webex' : /meet/.test(hay) ? 'Google Meet' : 'a meeting';
+    if (isMeeting && !meetingActive) {
+      meetingActive = true;
+      if (dismissedFor !== name) {
+        if (!win.isVisible()) win.showInactive();
+        win.webContents.send('meeting-detected', name);
+      }
+    } else if (!isMeeting && meetingActive) {
+      meetingActive = false;
+      dismissedFor = null;
+      win.webContents.send('meeting-cleared');
+    }
+  });
+}
 
 function createWindow() {
   const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
@@ -70,6 +111,9 @@ app.whenReady().then(async () => {
   globalShortcut.register('CommandOrControl+Shift+L', () => win && win.webContents.send('hotkey-listen'));
   globalShortcut.register('CommandOrControl+Shift+A', () => { if (win) { win.show(); win.focus(); win.webContents.send('hotkey-ask'); } });
 
+  setInterval(checkMeeting, 5000);
+  setTimeout(checkMeeting, 1500);
+
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
@@ -85,3 +129,4 @@ ipcMain.handle('set-click-through', (_e, v) => {
 });
 ipcMain.handle('close-app', () => app.quit());
 ipcMain.handle('minimize-app', () => win && win.hide());
+ipcMain.handle('dismiss-meeting', (_e, name) => { dismissedFor = name; });

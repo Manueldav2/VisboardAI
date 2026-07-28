@@ -157,3 +157,29 @@ body { font-family: var(--font); color: var(--text); -webkit-font-smoothing: ant
   background-repeat: no-repeat; background-position: right 8px center;
 }
 .status { flex: 1; text-align: right; font-size: 10.5px; color: var(--faint); }
+
+/* Meeting-detected toast */
+.mbanner {
+  position: absolute; top: 8px; left: 8px; right: 8px; z-index: 50;
+  display: flex; align-items: center; gap: 9px; padding: 9px 10px;
+  border-radius: 13px; background: rgba(28, 25, 20, 0.92); backdrop-filter: blur(24px);
+  border: 1px solid var(--border); box-shadow: 0 12px 34px rgba(0,0,0,.55);
+  animation: drop .3s cubic-bezier(.2,.7,.2,1);
+}
+.mbanner.hidden { display: none; }
+@keyframes drop { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+.mb-icon {
+  width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; flex-shrink: 0;
+  color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); box-shadow: 0 2px 8px rgba(212,166,74,.35);
+}
+.mb-text { display: flex; flex-direction: column; line-height: 1.25; }
+.mb-text b { font-size: 12px; color: var(--text); }
+.mb-text span { font-size: 10.5px; color: var(--muted); }
+.mb-take {
+  margin-left: auto; border: none; cursor: pointer; padding: 6px 12px; border-radius: 999px;
+  font: 700 11px var(--font); color: #0c0b09;
+  background: linear-gradient(135deg, var(--accent-hi), var(--accent)); box-shadow: 0 2px 8px rgba(212,166,74,.3);
+}
+.mb-take:hover { filter: brightness(1.08); }
+.mb-x { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 2px; }
+.mb-x:hover { color: var(--text); }

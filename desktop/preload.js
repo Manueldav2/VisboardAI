@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('gideon', {
   minimize: () => ipcRenderer.invoke('minimize-app'),
   onHotkeyListen: (cb) => ipcRenderer.on('hotkey-listen', cb),
   onHotkeyAsk: (cb) => ipcRenderer.on('hotkey-ask', cb),
+  onMeetingDetected: (cb) => ipcRenderer.on('meeting-detected', (_e, name) => cb(name)),
+  onMeetingCleared: (cb) => ipcRenderer.on('meeting-cleared', cb),
+  dismissMeeting: (name) => ipcRenderer.invoke('dismiss-meeting', name),
 });

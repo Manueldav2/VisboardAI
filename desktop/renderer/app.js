@@ -211,4 +211,26 @@ if (window.gideon) {
   window.gideon.onHotkeyAsk(() => els.askInput.focus());
 }
 
+// ── Meeting detection toast ──
+const mb = { el: $('mbanner'), app: $('mb-app'), take: $('mb-take'), x: $('mb-x') };
+let detectedApp = 'a meeting';
+if (window.gideon) {
+  window.gideon.onMeetingDetected((name) => {
+    if (listening) return;               // already taking notes
+    detectedApp = name || 'a meeting';
+    mb.app.textContent = detectedApp;
+    mb.el.classList.remove('hidden');
+  });
+  window.gideon.onMeetingCleared(() => mb.el.classList.add('hidden'));
+}
+mb.take.addEventListener('click', () => {
+  mb.el.classList.add('hidden');
+  els.source.value = 'both';             // capture the whole meeting
+  startListening();
+});
+mb.x.addEventListener('click', () => {
+  mb.el.classList.add('hidden');
+  if (window.gideon) window.gideon.dismissMeeting(detectedApp);
+});
+
 connect();

@@ -1,17 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { Mic, Network, ShieldCheck, Apple, ArrowLeft, Download, Cpu, MessageSquare, EyeOff } from 'lucide-react';
+import { Mic, Network, ShieldCheck, Apple, ArrowLeft, Download, Cpu, MessageSquare, EyeOff, Sparkles } from 'lucide-react';
 
-const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.2.0/Gideon.Listener-0.2.0-arm64.dmg';
+const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.2.1/Gideon.Listener-0.2.1-arm64.dmg';
 
 const FEATURES = [
+  { icon: Sparkles, title: 'Knows when you’re in a meeting', desc: 'Join a Meet, Zoom, or Teams call and Gideon pops up “Take notes” — one click captures the whole thing.' },
   { icon: Mic, title: 'Hears the whole room', desc: 'Captures your mic and system audio, so it maps the whole meeting — attributing who said what.' },
   { icon: Network, title: 'Live thought map', desc: 'Everything said becomes a growing Mermaid diagram in real time — Notes, Architecture, or Debate.' },
   { icon: MessageSquare, title: 'Ask it anything', desc: 'A copilot over the conversation: “what should I say?”, “summarize this” — instant answers.' },
   { icon: ShieldCheck, title: 'Catches fallacies & bad facts', desc: 'Flags logical fallacies and shaky claims live, as they’re said.' },
   { icon: EyeOff, title: 'Hidden from screen shares', desc: 'The overlay floats on top but is invisible to Zoom, Meet, and screen recording.' },
-  { icon: Cpu, title: 'All on Gemini', desc: 'Transcription, mapping, and answers run on Gemini — nothing else to set up.' },
+  { icon: Cpu, title: 'Zero setup', desc: 'Transcription, mapping, and answers just work — no API keys, no config, nothing to install.' },
 ];
 
 export default function DownloadPage() {
@@ -37,7 +38,7 @@ export default function DownloadPage() {
           <a href={DMG_URL} className="dl-btn">
             <Download size={18} /> Download for macOS
           </a>
-          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.2.0 · 94 MB</span>
+          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.2.1 · 94 MB</span>
         </div>
 
         <div className="dl-note">
@@ -64,7 +65,7 @@ export default function DownloadPage() {
         <ol>
           <li><span>1</span> Open Gideon Listener and pick a mode — Thought Plot, Architecture, or Debate.</li>
           <li><span>2</span> Hit <b>Listen</b>. It captures your voice and streams it to Gideon.</li>
-          <li><span>3</span> Gemini transcribes and draws your thinking as a live diagram — corrections included.</li>
+          <li><span>3</span> It transcribes and draws your thinking as a live diagram — corrections included.</li>
         </ol>
         <p className="dl-foot">
           Windows build, per-meeting saved notes, and code-signing are coming next. Global hotkeys: ⌘\ hide · ⌘⇧L listen · ⌘⇧A ask.
