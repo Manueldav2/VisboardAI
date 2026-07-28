@@ -889,6 +889,12 @@ async def study_session_ws(websocket: WebSocket):
                 await websocket.send_json({"type": "enhanced_notes", "text": enhanced})
                 continue
 
+            if msg_type == "title":
+                t = await voice_agent.generate_title(message.get("transcript", ""), message.get("notes", ""))
+                if t:
+                    await websocket.send_json({"type": "title_suggestion", "text": t})
+                continue
+
             # ===========================================================
             # REALTIME TRANSCRIPT — forwarded from OpenAI Realtime API
             # Run ONLY background agents (voice handled by Realtime).

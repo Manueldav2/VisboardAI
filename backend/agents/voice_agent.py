@@ -427,6 +427,29 @@ async def extract_terms(text: str) -> list[dict]:
         return []
 
 
+async def generate_title(transcript: str, notes: str = "") -> str:
+    """A short, human title for the meeting/note from its content (3-6 words)."""
+    src = (notes + "\n" + transcript).strip()
+    if len(src) < 12:
+        return ""
+    try:
+        response = await _client.aio.models.generate_content(
+            model=MODEL,
+            contents=(
+                f"{src[:4000]}\n\n"
+                "Give a concise, specific title for this conversation in 3-6 words. "
+                "No quotes, no punctuation at the end, Title Case. Return ONLY the title."
+            ),
+            config=genai.types.GenerateContentConfig(
+                temperature=0.3, max_output_tokens=30,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        return (response.text or "").strip().strip('"').splitlines()[0][:70]
+    except Exception:
+        return ""
+
+
 async def enhance_notes(transcript: str, notes: str = "", title: str = "") -> str:
     """Granola-style: turn a rough note + the meeting transcript into clean,
     structured meeting notes (markdown). The transcript is the source of truth;
