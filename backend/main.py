@@ -832,9 +832,41 @@ async def study_session_ws(websocket: WebSocket):
                         _architect_background(websocket, text, architect_history, "", tool_graph)
                     )
 
+                # Debate mode → live fallacy + technique detection.
+                if tool == "argument_ref":
+                    referee_history.append({"role": "user", "text": text})
+                    async def _ref():
+                        try:
+                            fallacy = await referee_agent.analyze_statement(text, referee_history)
+                            if fallacy and fallacy.get("has_issue"):
+                                await websocket.send_json({"type": "fallacy_call", "fallacy": {
+                                    "id": str(uuid.uuid4()),
+                                    "name": fallacy.get("fallacy_name", ""),
+                                    "category": fallacy.get("category", ""),
+                                    "what_was_said": fallacy.get("what_was_said", ""),
+                                    "why_its_wrong": fallacy.get("why_its_wrong", ""),
+                                    "correct_form": fallacy.get("correct_form", ""),
+                                    "severity": fallacy.get("severity", "medium"),
+                                    "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+                                }})
+                        except Exception:
+                            logger.debug("audio fallacy check failed", exc_info=True)
+                    asyncio.create_task(_ref())
+
                 asyncio.create_task(
                     _store_transcript_safe(session_id=session_id, speaker="user", text=text)
                 )
+                continue
+
+            # ===========================================================
+            # ASK — desktop copilot Q&A over the meeting transcript.
+            # ===========================================================
+            if msg_type == "ask":
+                q = message.get("text", "").strip()
+                if not q:
+                    continue
+                answer = await voice_agent.answer_question(q, message.get("context", ""))
+                await websocket.send_json({"type": "ask_answer", "text": answer})
                 continue
 
             # ===========================================================

@@ -143,7 +143,8 @@ async def analyze_statement(
             config=genai.types.GenerateContentConfig(
                 system_instruction=REFEREE_SYSTEM_PROMPT,
                 temperature=0.2,
-                max_output_tokens=512,
+                                max_output_tokens=512,
+                                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_FALLACY_SCHEMA,
             ),
@@ -204,7 +205,8 @@ async def argue_back(
             config=genai.types.GenerateContentConfig(
                 system_instruction=HARVEY_SPECTER_PROMPT,
                 temperature=0.7,
-                max_output_tokens=300,
+                                max_output_tokens=300,
+                                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 tools=[genai.types.Tool(google_search=genai.types.GoogleSearch())],
             ),
         )
@@ -293,7 +295,8 @@ async def analyze_technique(
             config=genai.types.GenerateContentConfig(
                 system_instruction=TECHNIQUE_ANALYZER_PROMPT,
                 temperature=0.2,
-                max_output_tokens=256,
+                                max_output_tokens=256,
+                                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_TECHNIQUE_SCHEMA,
             ),
@@ -400,7 +403,8 @@ async def extract_contentions(
             config=genai.types.GenerateContentConfig(
                 system_instruction=_CONTENTION_PROMPT,
                 temperature=0.2,
-                max_output_tokens=512,
+                                max_output_tokens=512,
+                                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_CONTENTION_SCHEMA,
             ),

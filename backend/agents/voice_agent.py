@@ -340,6 +340,42 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
         return ""
 
 
+async def answer_question(question: str, context: str = "") -> str:
+    """Copilot Q&A for the desktop listener.
+
+    Answers the user's question using the recent conversation/meeting
+    transcript as context. Concise, directly useful — like a meeting copilot.
+    """
+    if not question.strip():
+        return ""
+    sys = (
+        "You are Gideon, a sharp real-time meeting copilot. Answer the user's "
+        "question directly and concisely using the meeting transcript for context. "
+        "If they ask what to say, give them the actual words. If they ask for a "
+        "summary, give tight bullets. Never say 'as an AI'. 2-5 sentences unless "
+        "bullets are clearly better."
+    )
+    user = (
+        (f"## Meeting transcript so far\n{context}\n\n" if context.strip() else "")
+        + f"## Question\n{question}"
+    )
+    try:
+        response = await _client.aio.models.generate_content(
+            model=MODEL,
+            contents=user,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=sys,
+                temperature=0.4,
+                max_output_tokens=700,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        return (response.text or "").strip()
+    except Exception:
+        logger.exception("Copilot answer failed")
+        return "I couldn't answer that just now — try again."
+
+
 async def generate_tts(text: str, mode: str = "general") -> bytes | None:
     """Standalone TTS — generate audio from text. Used as background supplement.
 
