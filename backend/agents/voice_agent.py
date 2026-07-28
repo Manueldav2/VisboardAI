@@ -306,6 +306,40 @@ async def generate_audio_response(
     return (text, audio_bytes)
 
 
+async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
+    """Transcribe a short audio chunk to text with Gemini (verbatim).
+
+    Used by the desktop listener, which streams mic/system audio chunks
+    instead of browser speech-to-text. Returns '' on silence/failure.
+    """
+    if not audio_bytes:
+        return ""
+    try:
+        response = await _client.aio.models.generate_content(
+            model=MODEL,
+            contents=[
+                genai.types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                "Transcribe this audio to text verbatim. Return ONLY the spoken words, "
+                "no commentary, no timestamps, no speaker labels. If there is no clear "
+                "speech, return an empty string.",
+            ],
+            config=genai.types.GenerateContentConfig(
+                temperature=0,
+                max_output_tokens=1024,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        text = (response.text or "").strip()
+        # Gemini sometimes says this when there's nothing to transcribe.
+        low = text.lower()
+        if not text or low in ("(no speech)", "no speech", "[no speech]", "...") or "no clear speech" in low:
+            return ""
+        return text
+    except Exception:
+        logger.exception("Audio transcription failed")
+        return ""
+
+
 async def generate_tts(text: str, mode: str = "general") -> bytes | None:
     """Standalone TTS — generate audio from text. Used as background supplement.
 

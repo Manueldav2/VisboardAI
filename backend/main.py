@@ -771,6 +771,73 @@ async def study_session_ws(websocket: WebSocket):
                 continue
 
             # ===========================================================
+            # AUDIO CHUNK — from the desktop listener (mic/system audio).
+            # Transcribe with Gemini, then run the same silent map pipeline.
+            # ===========================================================
+            if msg_type == "audio_chunk":
+                b64 = message.get("audio", "")
+                mime = message.get("mime_type", "audio/webm")
+                tool = message.get("tool", "thought_plot")
+                mode = message.get("mode", "general")
+                speaker = message.get("speaker", "")
+                if not b64:
+                    continue
+                try:
+                    audio_bytes = base64.b64decode(b64)
+                except Exception:
+                    continue
+
+                text = await voice_agent.transcribe_audio(audio_bytes, mime)
+                if not text:
+                    continue
+
+                # Tell the client what was heard (so it can show the transcript).
+                await websocket.send_json({
+                    "type": "transcript_text",
+                    "text": text,
+                    "speaker": speaker,
+                })
+
+                # Attribute speech to whoever said it (desktop passes a label).
+                plot_text = f"{speaker}: {text}" if speaker else text
+
+                tool_graph = existing_graphs.setdefault(
+                    tool, {"nodes": [], "edges": [], "clusters": []}
+                )
+                plot_mode = tool if tool in ("argument_ref", "harvey") else "general"
+                asyncio.create_task(
+                    _general_chat_plot(websocket, plot_text, "", tool_graph, tool=tool, plot_mode=plot_mode)
+                )
+
+                if message.get("fact_check_enabled", True):
+                    asyncio.create_task(
+                        _run_fact_check(
+                            websocket=websocket,
+                            session_id=session_id,
+                            transcript_chunk=text,
+                            router_instruction="",
+                            class_id=message.get("class_id"),
+                            topic=message.get("topic"),
+                            claim_registry=claim_registry,
+                            mode=mode,
+                            existing_graph=existing_graph,
+                            tool=tool,
+                            voice_enabled=False,
+                        )
+                    )
+
+                if tool == "architect":
+                    architect_history.append({"role": "user", "text": text})
+                    asyncio.create_task(
+                        _architect_background(websocket, text, architect_history, "", tool_graph)
+                    )
+
+                asyncio.create_task(
+                    _store_transcript_safe(session_id=session_id, speaker="user", text=text)
+                )
+                continue
+
+            # ===========================================================
             # REALTIME TRANSCRIPT — forwarded from OpenAI Realtime API
             # Run ONLY background agents (voice handled by Realtime).
             # ===========================================================
