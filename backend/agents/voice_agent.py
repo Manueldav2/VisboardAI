@@ -427,6 +427,43 @@ async def extract_terms(text: str) -> list[dict]:
         return []
 
 
+async def enhance_notes(transcript: str, notes: str = "", title: str = "") -> str:
+    """Granola-style: turn a rough note + the meeting transcript into clean,
+    structured meeting notes (markdown). The transcript is the source of truth;
+    the user's rough notes signal what THEY cared about."""
+    if not transcript.strip() and not notes.strip():
+        return ""
+    sys = (
+        "You are Gideon, an elite meeting note-taker. Turn the transcript into "
+        "clean, skimmable notes in Markdown. Weave in what the user jotted (it "
+        "signals what matters to them). Use these sections, omitting any that are "
+        "empty:\n\n## TL;DR (2-3 sentences)\n## Key points (bullets)\n"
+        "## Decisions (bullets)\n## Action items (bullets, '- [ ] owner — task')\n"
+        "## Open questions (bullets)\n\nBe concise and specific. Use the real "
+        "names/terms from the transcript. No preamble, no 'here are your notes'."
+    )
+    user = (
+        (f"# {title}\n\n" if title.strip() else "")
+        + (f"## The user's rough notes\n{notes}\n\n" if notes.strip() else "")
+        + f"## Transcript\n{transcript}"
+    )
+    try:
+        response = await _client.aio.models.generate_content(
+            model=MODEL,
+            contents=user,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=sys,
+                temperature=0.3,
+                max_output_tokens=1600,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        return (response.text or "").strip()
+    except Exception:
+        logger.exception("note enhancement failed")
+        return ""
+
+
 async def generate_tts(text: str, mode: str = "general") -> bytes | None:
     """Standalone TTS — generate audio from text. Used as background supplement.
 

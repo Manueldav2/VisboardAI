@@ -880,6 +880,16 @@ async def study_session_ws(websocket: WebSocket):
                 continue
 
             # ===========================================================
+            # ENHANCE — Granola-style structured notes from transcript + notes.
+            # ===========================================================
+            if msg_type == "enhance":
+                enhanced = await voice_agent.enhance_notes(
+                    message.get("transcript", ""), message.get("notes", ""), message.get("title", "")
+                )
+                await websocket.send_json({"type": "enhanced_notes", "text": enhanced})
+                continue
+
+            # ===========================================================
             # REALTIME TRANSCRIPT — forwarded from OpenAI Realtime API
             # Run ONLY background agents (voice handled by Realtime).
             # ===========================================================
