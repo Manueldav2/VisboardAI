@@ -61,6 +61,7 @@ export default function GideonPage() {
   const [interim, setInterim] = useState('');
   const [textInput, setTextInput] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
   const [banner, setBanner] = useState<string | null>(null);
   const [hello, setHello] = useState('Welcome');
   const [thinking, setThinking] = useState(false);
@@ -181,7 +182,22 @@ export default function GideonPage() {
     import('mermaid').then(async m => {
       try {
         const { svg } = await m.default.render(`mm-${Date.now()}`, mermaidCode);
-        if (!cancelled && mapRef.current) mapRef.current.innerHTML = svg;
+        if (cancelled || !mapRef.current) return;
+        mapRef.current.innerHTML = svg;
+        // Auto-fit: scale a small diagram up (or a big one down) to fill the stage.
+        const svgEl = mapRef.current.querySelector('svg');
+        const scroll = mapRef.current.closest('.map-scroll') as HTMLElement | null;
+        if (svgEl && scroll) {
+          const vb = svgEl.viewBox?.baseVal;
+          const natW = (vb && vb.width) || svgEl.getBoundingClientRect().width || 1;
+          const natH = (vb && vb.height) || svgEl.getBoundingClientRect().height || 1;
+          const cw = scroll.clientWidth - 64;
+          const ch = scroll.clientHeight - 64;
+          const fit = Math.max(0.5, Math.min(cw / natW, ch / natH, 2.4));
+          svgEl.style.width = `${natW}px`;
+          svgEl.style.height = `${natH}px`;
+          setFitScale(fit);
+        }
       } catch { /* keep last good render */ }
     });
     return () => { cancelled = true; };
@@ -284,7 +300,7 @@ export default function GideonPage() {
             </div>
             {mermaidCode ? (
               <div className="map-scroll">
-                <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s' }}>
+                <div style={{ transform: `scale(${fitScale * zoom})`, transformOrigin: 'top center', transition: 'transform 0.25s' }}>
                   <div ref={mapRef} className="mermaid-render" />
                 </div>
               </div>
