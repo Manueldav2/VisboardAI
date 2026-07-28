@@ -1,15 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { Mic, Network, ShieldCheck, Apple, ArrowLeft, Download, Cpu } from 'lucide-react';
+import { Mic, Network, ShieldCheck, Apple, ArrowLeft, Download, Cpu, MessageSquare, EyeOff } from 'lucide-react';
 
-const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.1.0/Gideon.Listener-0.1.0-arm64.dmg';
+const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.2.0/Gideon.Listener-0.2.0-arm64.dmg';
 
 const FEATURES = [
-  { icon: Mic, title: 'Turn it on and talk', desc: 'A floating companion that listens while you think or meet — no tab, no typing.' },
-  { icon: Network, title: 'Live thought map', desc: 'Everything you say becomes a growing Mermaid diagram in real time.' },
-  { icon: ShieldCheck, title: 'Quietly fact-checks', desc: 'Flags shaky claims as you go, and attributes what a speaker said to the speaker.' },
-  { icon: Cpu, title: 'Powered by Gemini', desc: 'Transcription and mapping run on Gemini — nothing else needed.' },
+  { icon: Mic, title: 'Hears the whole room', desc: 'Captures your mic and system audio, so it maps the whole meeting — attributing who said what.' },
+  { icon: Network, title: 'Live thought map', desc: 'Everything said becomes a growing Mermaid diagram in real time — Notes, Architecture, or Debate.' },
+  { icon: MessageSquare, title: 'Ask it anything', desc: 'A copilot over the conversation: “what should I say?”, “summarize this” — instant answers.' },
+  { icon: ShieldCheck, title: 'Catches fallacies & bad facts', desc: 'Flags logical fallacies and shaky claims live, as they’re said.' },
+  { icon: EyeOff, title: 'Hidden from screen shares', desc: 'The overlay floats on top but is invisible to Zoom, Meet, and screen recording.' },
+  { icon: Cpu, title: 'All on Gemini', desc: 'Transcription, mapping, and answers run on Gemini — nothing else to set up.' },
 ];
 
 export default function DownloadPage() {
@@ -35,7 +37,7 @@ export default function DownloadPage() {
           <a href={DMG_URL} className="dl-btn">
             <Download size={18} /> Download for macOS
           </a>
-          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.1.0 · 94 MB</span>
+          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.2.0 · 94 MB</span>
         </div>
 
         <div className="dl-note">
@@ -65,7 +67,7 @@ export default function DownloadPage() {
           <li><span>3</span> Gemini transcribes and draws your thinking as a live diagram — corrections included.</li>
         </ol>
         <p className="dl-foot">
-          Windows build and system-audio capture (hear the whole meeting) are coming next.
+          Windows build, per-meeting saved notes, and code-signing are coming next. Global hotkeys: ⌘\ hide · ⌘⇧L listen · ⌘⇧A ask.
         </p>
       </section>
     </div>

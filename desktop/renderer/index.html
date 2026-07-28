@@ -3,46 +3,66 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gideon Listener</title>
+  <title>Gideon</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="bar">
-    <div class="brand">
-      <span class="logo">◒</span>
-      <span class="name">Gideon</span>
-    </div>
-    <select id="mode" class="mode">
-      <option value="thought_plot">Thought Plot</option>
-      <option value="architect">Architecture</option>
-      <option value="argument_ref">Debate</option>
-    </select>
-    <div class="spacer"></div>
-    <button id="pin" class="icon-btn on" title="Float on top">⇧</button>
-  </header>
+  <div class="shell">
+    <!-- Title bar -->
+    <header class="titlebar">
+      <div class="brand"><span class="logo">◒</span><span class="wordmark">Gideon</span></div>
+      <div class="modes" id="modes">
+        <button class="chip on" data-tool="thought_plot">Notes</button>
+        <button class="chip" data-tool="architect">Architect</button>
+        <button class="chip" data-tool="argument_ref">Debate</button>
+      </div>
+      <div class="win-ctl">
+        <button id="stealth" class="wbtn on" title="Hidden from screen share">◉</button>
+        <button id="min" class="wbtn" title="Hide (⌘\\)">–</button>
+        <button id="close" class="wbtn danger" title="Quit">×</button>
+      </div>
+    </header>
 
-  <main class="stage">
-    <div id="map" class="map"></div>
-    <div id="empty" class="empty">
-      <div class="empty-orb">◒</div>
-      <p id="empty-text">Press <b>Listen</b> and start talking. Your thinking becomes a live map.</p>
-      <p id="interim" class="interim"></p>
-    </div>
-  </main>
+    <!-- Stage: live map -->
+    <main class="stage">
+      <div id="map" class="map"></div>
+      <div id="empty" class="empty">
+        <div class="orb">◒</div>
+        <p id="empty-text">Press <b>Listen</b> — Gideon hears the room and maps the thinking live.</p>
+        <p id="interim" class="interim"></p>
+      </div>
 
-  <section id="rail" class="rail hidden">
-    <div id="flags" class="flags"></div>
-    <div id="transcript" class="transcript"></div>
-  </section>
+      <!-- Copilot answer (overlays on ask) -->
+      <div id="answer" class="answer hidden">
+        <div class="answer-head"><span>Gideon</span><button id="answer-close">×</button></div>
+        <div id="answer-body" class="answer-body"></div>
+      </div>
+    </main>
 
-  <footer class="dock">
-    <button id="listen" class="listen">
-      <span class="mic-dot"></span>
-      <span id="listen-label">Listen</span>
-    </button>
-    <div id="status" class="status">Ready</div>
-    <button id="toggle-rail" class="icon-btn" title="Notes">☰</button>
-  </footer>
+    <!-- Insights (fallacies / fact-checks) -->
+    <section id="insights" class="insights hidden"></section>
+
+    <!-- Transcript drawer -->
+    <section id="transcript" class="transcript hidden"></section>
+
+    <!-- Copilot ask bar -->
+    <form id="ask-form" class="ask">
+      <input id="ask-input" class="ask-input" placeholder="Ask Gideon anything about the conversation…" />
+      <button type="submit" class="ask-send" title="Ask (⌘⇧A)">↑</button>
+    </form>
+
+    <!-- Dock -->
+    <footer class="dock">
+      <button id="listen" class="listen"><span class="dot"></span><span id="listen-label">Listen</span></button>
+      <select id="source" class="source" title="Audio source">
+        <option value="mic">Mic only</option>
+        <option value="both">Mic + System</option>
+        <option value="system">System only</option>
+      </select>
+      <div id="status" class="status">Ready</div>
+      <button id="toggle-notes" class="wbtn" title="Transcript">☰</button>
+    </footer>
+  </div>
 
   <script src="mermaid.min.js"></script>
   <script src="app.js"></script>
