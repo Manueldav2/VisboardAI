@@ -798,15 +798,17 @@ async def study_session_ws(websocket: WebSocket):
                     "speaker": speaker,
                 })
 
-                # Explain any jargon/abbreviations (CAC, LP, ARR…) in the background.
-                async def _terms():
-                    try:
-                        terms = await voice_agent.extract_terms(text)
-                        if terms:
-                            await websocket.send_json({"type": "terms", "terms": terms})
-                    except Exception:
-                        logger.debug("terms send failed", exc_info=True)
-                asyncio.create_task(_terms())
+                # Explain any jargon/abbreviations (CAC, LP, ARR…) — only when the
+                # user is actually looking at the Terms view (saves an LLM call/chunk).
+                if message.get("terms_enabled", False):
+                    async def _terms():
+                        try:
+                            terms = await voice_agent.extract_terms(text)
+                            if terms:
+                                await websocket.send_json({"type": "terms", "terms": terms})
+                        except Exception:
+                            logger.debug("terms send failed", exc_info=True)
+                    asyncio.create_task(_terms())
 
                 # Attribute speech to whoever said it (desktop passes a label).
                 plot_text = f"{speaker}: {text}" if speaker else text
@@ -814,12 +816,15 @@ async def study_session_ws(websocket: WebSocket):
                 tool_graph = existing_graphs.setdefault(
                     tool, {"nodes": [], "edges": [], "clusters": []}
                 )
-                plot_mode = tool if tool in ("argument_ref", "harvey") else "general"
-                asyncio.create_task(
-                    _general_chat_plot(websocket, plot_text, "", tool_graph, tool=tool, plot_mode=plot_mode)
-                )
+                # Build the live map ONLY when the user is viewing it (or in a
+                # map-first mode). By default listening just transcribes.
+                if message.get("map_enabled", False):
+                    plot_mode = tool if tool in ("argument_ref", "harvey") else "general"
+                    asyncio.create_task(
+                        _general_chat_plot(websocket, plot_text, "", tool_graph, tool=tool, plot_mode=plot_mode)
+                    )
 
-                if message.get("fact_check_enabled", True):
+                if message.get("fact_check_enabled", False):
                     asyncio.create_task(
                         _run_fact_check(
                             websocket=websocket,
@@ -836,14 +841,14 @@ async def study_session_ws(websocket: WebSocket):
                         )
                     )
 
-                if tool == "architect":
+                if tool == "architect" and message.get("map_enabled", False):
                     architect_history.append({"role": "user", "text": text})
                     asyncio.create_task(
                         _architect_background(websocket, text, architect_history, "", tool_graph)
                     )
 
-                # Debate mode → live fallacy + technique detection.
-                if tool == "argument_ref":
+                # Debate mode → live fallacy + technique detection (only while viewing).
+                if tool == "argument_ref" and message.get("map_enabled", False):
                     referee_history.append({"role": "user", "text": text})
                     async def _ref():
                         try:
@@ -893,6 +898,37 @@ async def study_session_ws(websocket: WebSocket):
                 t = await voice_agent.generate_title(message.get("transcript", ""), message.get("notes", ""))
                 if t:
                     await websocket.send_json({"type": "title_suggestion", "text": t})
+                continue
+
+            # ===========================================================
+            # MAP NOW — one-shot: build the map from transcript on demand
+            # (fired when the user opens the Map view / switches mode).
+            # ===========================================================
+            if msg_type == "map_now":
+                text = message.get("text", "").strip()
+                if not text:
+                    continue
+                tool = message.get("tool", "thought_plot")
+                tool_graph = existing_graphs.setdefault(
+                    tool, {"nodes": [], "edges": [], "clusters": []}
+                )
+                plot_mode = tool if tool in ("argument_ref", "harvey") else "general"
+                asyncio.create_task(
+                    _general_chat_plot(websocket, text, "", tool_graph, tool=tool, plot_mode=plot_mode)
+                )
+                continue
+
+            # TERMS NOW — one-shot jargon explainer over the transcript on demand.
+            if msg_type == "terms_now":
+                text = message.get("text", "").strip()
+                if not text:
+                    continue
+                try:
+                    terms = await voice_agent.extract_terms(text)
+                    if terms:
+                        await websocket.send_json({"type": "terms", "terms": terms})
+                except Exception:
+                    logger.debug("terms_now failed", exc_info=True)
                 continue
 
             # ===========================================================

@@ -106,7 +106,11 @@ function doEnhance() { const transcript = S.lines.map((l) => `${l.who === 'them'
 function maybeTitle() { if (S.title || titleRequested || S.lines.length < 3) return; titleRequested = true; wsSend({ type: 'title', transcript: S.lines.map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n'), notes: S.notes }); }
 
 // ── Tabs ──
-function setTab(t) { S.tab = t; save(); document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t)); document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + t)); if (t === 'map') renderMap(); }
+function transcriptText(n) { return S.lines.slice(-(n || 40)).map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n'); }
+function mapNow() { if (S.lines.length) { if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'map_now', text: transcriptText(30), tool: currentTool }); } }
+function setTab(t) { S.tab = t; save(); document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t)); document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + t)); if (t === 'map') { renderMap(); if (!S.mermaid[currentTool]) mapNow(); } if (t === 'terms' && !S.terms.length && S.lines.length) requestTermsOnce(); }
+let termsRequested = false;
+function requestTermsOnce() { if (termsRequested) return; termsRequested = true; if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'terms_now', text: transcriptText(60) }); }
 
 // ── Library ──
 function openLibrary() { renderLibrary(''); $('lib-search-input').value = ''; $('library').classList.remove('hidden'); }
@@ -122,7 +126,7 @@ function hydrate() {
   $('enhanced').innerHTML = S.enhanced ? mdToHtml(S.enhanced) : '';
   currentTool = S.mode || 'thought_plot'; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c.dataset.tool === currentTool));
   renderTranscript(); renderTerms(); renderMap(); $('asks').innerHTML = ''; $('chat-empty').style.display = ''; showEnhanced(false);
-  $('meta-date').textContent = relTime(S.date); titleRequested = !!S.title;
+  $('meta-date').textContent = relTime(S.date); titleRequested = !!S.title; termsRequested = false;
 }
 function openNote(id) { save(); const n = NOTES.find((x) => x.id === id); if (!n) return; Object.assign(S, JSON.parse(JSON.stringify(n))); hydrate(); setTab('notes'); closeLibrary(); }
 function newNote() { if (listening) stopListening(); save(); Object.assign(S, freshSession()); hydrate(); setTab('notes'); closeLibrary(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); }
@@ -134,7 +138,17 @@ function makePipeline(stream, speaker) {
   st.proc.onaudioprocess = (ev) => { if (!listening) return; const input = ev.inputBuffer.getChannelData(0); let sum = 0; for (let i = 0; i < input.length; i++) sum += input[i] * input[i]; const rms = Math.sqrt(sum / input.length), now = performance.now(); st.pending.push(new Float32Array(input)); st.plen += input.length; if (rms > RMS_THRESH) { st.hasSpeech = true; st.lastSpeech = now; } const durMs = (st.plen / SR) * 1000, silent = now - st.lastSpeech; if (st.hasSpeech && ((silent > SILENCE_MS && durMs > MIN_SPEECH_MS) || durMs > MAX_CHUNK_MS)) flush(st); else if (!st.hasSpeech && durMs > 3000) { st.pending = []; st.plen = 0; } };
   st.src.connect(st.proc); st.proc.connect(muteSink); return st;
 }
-function flush(st) { if (!st.plen) return; const merged = new Float32Array(st.plen); let off = 0; for (const b of st.pending) { merged.set(b, off); off += b.length; } st.pending = []; st.plen = 0; st.hasSpeech = false; wsSend({ type: 'audio_chunk', audio: abToB64(encodeWav(merged, SR)), mime_type: 'audio/wav', tool: currentTool, mode: 'general', speaker: st.speaker, fact_check_enabled: true }); }
+// AI runs on-demand only: transcription is always on, but the map / fact-check /
+// terms passes fire only while you're actually viewing that panel. Default
+// listening = transcribe + save, nothing else billed.
+function chunkFlags() {
+  return {
+    map_enabled: S.tab === 'map',
+    terms_enabled: S.tab === 'terms',
+    fact_check_enabled: S.tab === 'map' && currentTool === 'argument_ref',
+  };
+}
+function flush(st) { if (!st.plen) return; const merged = new Float32Array(st.plen); let off = 0; for (const b of st.pending) { merged.set(b, off); off += b.length; } st.pending = []; st.plen = 0; st.hasSpeech = false; wsSend(Object.assign({ type: 'audio_chunk', audio: abToB64(encodeWav(merged, SR)), mime_type: 'audio/wav', tool: currentTool, mode: 'general', speaker: st.speaker }, chunkFlags())); }
 async function startListening() {
   if (!ws || ws.readyState > 1) connect();
   audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR }); muteSink = audioCtx.createGain(); muteSink.gain.value = 0; muteSink.connect(audioCtx.destination); pipelines = [];
@@ -167,7 +181,7 @@ function init() {
   $('tg-enh').addEventListener('click', () => { if (S.enhanced) showEnhanced(true); else doEnhance(); });
   $('enhance').addEventListener('click', doEnhance);
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setTab(b.dataset.tab); });
-  $('modes').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); currentTool = b.dataset.tool; S.mode = currentTool; save(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); renderMap(); });
+  $('modes').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); currentTool = b.dataset.tool; S.mode = currentTool; save(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); renderMap(); if (!S.mermaid[currentTool]) mapNow(); });
   $('ask-form').addEventListener('submit', (e) => { e.preventDefault(); const q = $('ask-input').value.trim(); if (!q) return; $('ask-input').value = ''; setTab('chat'); pendingAnswer = addAsk(q); if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'ask', text: q, context: S.lines.slice(-40).map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n') }); });
   $('export').addEventListener('click', () => { const md = [`# ${S.title || 'Meeting notes'}`, '', S.enhanced || '', '', '## Transcript', ...S.lines.map((l) => `**${l.who === 'them' ? 'Them' : 'You'}:** ${l.text}`)].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `gideon-${(S.title || 'notes').replace(/\s+/g, '-').toLowerCase()}.md`; a.click(); URL.revokeObjectURL(a.href); });
   $('new').addEventListener('click', newNote);
@@ -192,14 +206,14 @@ function init() {
   $('stealth').addEventListener('click', async () => { const on = !$('stealth').classList.contains('on'); $('stealth').classList.toggle('on', on); if (window.gideon) await window.gideon.setStealth(on); });
 
   if (window.gideon) {
-    window.gideon.onView((v) => document.body.classList.toggle('expanded', v === 'panel'));
+    window.gideon.onView((v) => { document.body.classList.toggle('expanded', v === 'panel'); document.body.classList.toggle('toast', v === 'toast'); });
     window.gideon.onHotkeyListen(() => (listening ? stopListening() : startListening()));
     window.gideon.onHotkeyAsk(() => { setTab('chat'); $('ask-input').focus(); });
     window.gideon.onMeetingDetected((name) => { if (listening) return; $('mb-app').textContent = name || 'a meeting'; $('mbanner').classList.remove('hidden'); });
     window.gideon.onMeetingCleared(() => $('mbanner').classList.add('hidden'));
   }
-  $('mb-take').addEventListener('click', () => { $('mbanner').classList.add('hidden'); $('source').value = 'both'; startListening(); });
-  $('mb-x').addEventListener('click', () => { $('mbanner').classList.add('hidden'); if (window.gideon) window.gideon.dismissMeeting($('mb-app').textContent); });
+  $('mb-take').addEventListener('click', () => { $('mbanner').classList.add('hidden'); $('source').value = 'both'; if (window.gideon) window.gideon.expand(); startListening(); });
+  $('mb-x').addEventListener('click', () => { $('mbanner').classList.add('hidden'); if (window.gideon) { window.gideon.dismissMeeting($('mb-app').textContent); window.gideon.collapse(); } });
 
   connect();
 }

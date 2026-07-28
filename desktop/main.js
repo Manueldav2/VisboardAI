@@ -71,20 +71,23 @@ function checkMeeting() {
       meetingActive = true;
       if (dismissedFor !== name) {
         if (!win.isVisible()) win.showInactive();
-        expandWin();
         win.webContents.send('meeting-detected', name);
+        // Small corner nudge, not the whole app — Granola-style.
+        showToast();
       }
     } else if (!isMeeting && meetingActive) {
       meetingActive = false;
       dismissedFor = null;
       win.webContents.send('meeting-cleared');
+      hideToast();
     }
   });
 }
 
-const PILL = { width: 116, height: 38 };
+const PILL = { width: 42, height: 104 };
 const PANEL = { width: 440, height: 640 };
-let expanded = false;
+const TOAST = { width: 268, height: 60 };
+let viewState = 'pill'; // 'pill' | 'toast' | 'panel'
 
 function anchorRight(size) {
   // Keep the window's top-right corner fixed while it grows/shrinks.
@@ -97,20 +100,28 @@ function anchorRight(size) {
   return { x, y, width: size.width, height: size.height };
 }
 function expandWin() {
-  if (!win || expanded) return;
-  expanded = true;
+  if (!win || viewState === 'panel') return;
+  viewState = 'panel';
   win.setResizable(false);
-  // Resize instantly (no animated grow = no clipped-content flash); the
-  // renderer animates the panel in via CSS for smoothness.
   win.setBounds(anchorRight(PANEL), false);
   win.webContents.send('view', 'panel');
   win.focus();
 }
 function collapseWin() {
-  if (!win || !expanded) return;
-  expanded = false;
+  if (!win || viewState === 'pill') return;
+  viewState = 'pill';
   win.setBounds(anchorRight(PILL), false);
   win.webContents.send('view', 'pill');
+}
+function showToast() {
+  if (!win || viewState !== 'pill') return; // never interrupt an open panel
+  viewState = 'toast';
+  win.setBounds(anchorRight(TOAST), false);
+  win.webContents.send('view', 'toast');
+}
+function hideToast() {
+  if (!win || viewState !== 'toast') return;
+  collapseWin();
 }
 
 function createWindow() {
@@ -123,10 +134,9 @@ function createWindow() {
     title: 'Gideon',
     frame: false,
     transparent: true,
-    hasShadow: true,
+    hasShadow: false,
     resizable: false,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
+    roundedCorners: false,
     backgroundColor: '#00000000',
     show: false,
     alwaysOnTop: true,
