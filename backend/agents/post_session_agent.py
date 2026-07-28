@@ -179,6 +179,7 @@ async def analyze_session(
                 system_instruction=_SYSTEM_PROMPT,
                 temperature=0.2,
                 max_output_tokens=1024,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_ANALYZE_TOOL["function"]["parameters"],
             ),

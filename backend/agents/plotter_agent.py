@@ -150,7 +150,10 @@ async def should_plot(
             config=genai.types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.3,
-                max_output_tokens=1024,
+                max_output_tokens=2048,
+                # Gemini 2.5 Flash "thinking" tokens count against the output
+                # budget and were truncating the JSON — disable them here.
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_RESPONSE_SCHEMA,
             ),

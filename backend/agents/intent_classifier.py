@@ -116,6 +116,7 @@ async def classify_intent(
                 system_instruction=_SYSTEM_PROMPT,
                 temperature=0,
                 max_output_tokens=256,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_INTENT_SCHEMA,
             ),

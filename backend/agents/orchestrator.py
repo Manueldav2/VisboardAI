@@ -173,6 +173,7 @@ async def orchestrate(
                 system_instruction="\n\n".join(sys_parts),
                 temperature=0,
                 max_output_tokens=512,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_ORCHESTRATE_TOOL["function"]["parameters"],
             ),

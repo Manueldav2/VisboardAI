@@ -2101,7 +2101,7 @@ async def _general_chat_plot(
                     },
                 })
     except Exception:
-        logger.debug("Plot failed for tool=%s — non-critical", tool)
+        logger.debug("Plot failed for tool=%s — non-critical", tool, exc_info=True)
 
 
 async def _run_fact_check(

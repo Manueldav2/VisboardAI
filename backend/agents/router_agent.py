@@ -82,6 +82,7 @@ async def should_respond(
                 system_instruction=system_prompt,
                 temperature=0.2,
                 max_output_tokens=512,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
                 response_schema=_ROUTER_SCHEMA,
             ),
