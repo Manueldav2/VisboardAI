@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Mic, Network, ShieldCheck, Apple, ArrowLeft, Download, Cpu, MessageSquare, EyeOff, Sparkles } from 'lucide-react';
 
-const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.3.0/Gideon.Listener-0.3.0-arm64.dmg';
+const DMG_URL = 'https://github.com/Manueldav2/VisboardAI/releases/download/listener-v0.3.1/Gideon.Listener-0.3.1-arm64.dmg';
 
 const FEATURES = [
   { icon: Sparkles, title: 'It writes your notes for you', desc: 'Jot a few rough bullets — Gideon hears the whole meeting and Enhances them into clean notes: TL;DR, key points, decisions, action items.' },

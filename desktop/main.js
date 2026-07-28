@@ -82,7 +82,7 @@ function checkMeeting() {
   });
 }
 
-const PILL = { width: 74, height: 138 };
+const PILL = { width: 116, height: 38 };
 const PANEL = { width: 440, height: 640 };
 let expanded = false;
 
