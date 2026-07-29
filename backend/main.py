@@ -874,6 +874,80 @@ async def study_session_ws(websocket: WebSocket):
                 continue
 
             # ===========================================================
+            # TEXT CHUNK — device already transcribed on-device (yap / Apple
+            # SpeechAnalyzer). Skip transcription; just run the on-demand AI
+            # the client asked for. Same gating as audio_chunk.
+            # ===========================================================
+            if msg_type == "text_chunk":
+                text = (message.get("text") or "").strip()
+                if not text:
+                    continue
+                tool = message.get("tool", "thought_plot")
+                mode = message.get("mode", "general")
+                speaker = message.get("speaker", "")
+
+                if message.get("terms_enabled", False):
+                    async def _terms_t():
+                        try:
+                            terms = await voice_agent.extract_terms(text)
+                            if terms:
+                                await websocket.send_json({"type": "terms", "terms": terms})
+                        except Exception:
+                            logger.debug("terms send failed", exc_info=True)
+                    asyncio.create_task(_terms_t())
+
+                plot_text = f"{speaker}: {text}" if speaker else text
+                tool_graph = existing_graphs.setdefault(
+                    tool, {"nodes": [], "edges": [], "clusters": []}
+                )
+                if message.get("map_enabled", False):
+                    plot_mode = tool if tool in ("argument_ref", "harvey") else "general"
+                    asyncio.create_task(
+                        _general_chat_plot(websocket, plot_text, "", tool_graph, tool=tool, plot_mode=plot_mode)
+                    )
+
+                if message.get("fact_check_enabled", False):
+                    asyncio.create_task(
+                        _run_fact_check(
+                            websocket=websocket, session_id=session_id, transcript_chunk=text,
+                            router_instruction="", class_id=message.get("class_id"),
+                            topic=message.get("topic"), claim_registry=claim_registry, mode=mode,
+                            existing_graph=existing_graph, tool=tool, voice_enabled=False,
+                        )
+                    )
+
+                if tool == "architect" and message.get("map_enabled", False):
+                    architect_history.append({"role": "user", "text": text})
+                    asyncio.create_task(
+                        _architect_background(websocket, text, architect_history, "", tool_graph)
+                    )
+
+                if tool == "argument_ref" and message.get("map_enabled", False):
+                    referee_history.append({"role": "user", "text": text})
+                    async def _ref_t():
+                        try:
+                            fallacy = await referee_agent.analyze_statement(text, referee_history)
+                            if fallacy and fallacy.get("has_issue"):
+                                await websocket.send_json({"type": "fallacy_call", "fallacy": {
+                                    "id": str(uuid.uuid4()),
+                                    "name": fallacy.get("fallacy_name", ""),
+                                    "category": fallacy.get("category", ""),
+                                    "what_was_said": fallacy.get("what_was_said", ""),
+                                    "why_its_wrong": fallacy.get("why_its_wrong", ""),
+                                    "correct_form": fallacy.get("correct_form", ""),
+                                    "severity": fallacy.get("severity", "medium"),
+                                    "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+                                }})
+                        except Exception:
+                            logger.debug("text fallacy check failed", exc_info=True)
+                    asyncio.create_task(_ref_t())
+
+                asyncio.create_task(
+                    _store_transcript_safe(session_id=session_id, speaker="user", text=text)
+                )
+                continue
+
+            # ===========================================================
             # ASK — desktop copilot Q&A over the meeting transcript.
             # ===========================================================
             if msg_type == "ask":

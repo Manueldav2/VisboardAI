@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld('gideon', {
   dragStart: () => ipcRenderer.invoke('drag-start'),
   dragMove: (dx, dy) => ipcRenderer.invoke('drag-move', dx, dy),
   dragEnd: () => ipcRenderer.invoke('drag-end'),
+  sttAvailable: () => ipcRenderer.invoke('stt-available'),
+  transcribeWav: (b64) => ipcRenderer.invoke('transcribe-wav', b64),
 });

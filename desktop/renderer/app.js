@@ -41,7 +41,7 @@ function save() {
 function relTime(ts) { if (!ts) return 'Today'; const d = new Date(ts), now = new Date(), day = 86400000, diff = now - ts; if (diff < day && now.getDate() === d.getDate()) return 'Today · ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); if (diff < 2 * day) return 'Yesterday'; if (diff < 7 * day) return d.toLocaleDateString([], { weekday: 'long' }); return d.toLocaleDateString([], { month: 'short', day: 'numeric' }); }
 
 let ws = null, wsReady = false, wsQueue = [];
-let listening = false, currentTool = 'thought_plot';
+let listening = false, currentTool = 'thought_plot', localSTT = false;
 let audioCtx = null, muteSink = null, pipelines = [];
 let recStart = 0, recTimer = null, enhanceDirty = false, titleRequested = false;
 
@@ -148,7 +148,27 @@ function chunkFlags() {
     fact_check_enabled: S.tab === 'map' && currentTool === 'argument_ref',
   };
 }
-function flush(st) { if (!st.plen) return; const merged = new Float32Array(st.plen); let off = 0; for (const b of st.pending) { merged.set(b, off); off += b.length; } st.pending = []; st.plen = 0; st.hasSpeech = false; wsSend(Object.assign({ type: 'audio_chunk', audio: abToB64(encodeWav(merged, SR)), mime_type: 'audio/wav', tool: currentTool, mode: 'general', speaker: st.speaker }, chunkFlags())); }
+function flush(st) {
+  if (!st.plen) return;
+  const merged = new Float32Array(st.plen); let off = 0;
+  for (const b of st.pending) { merged.set(b, off); off += b.length; }
+  st.pending = []; st.plen = 0; st.hasSpeech = false;
+  const b64 = abToB64(encodeWav(merged, SR));
+  if (localSTT && window.gideon && window.gideon.transcribeWav) {
+    // Transcribe on-device (free); only ping the backend for on-demand AI.
+    window.gideon.transcribeWav(b64).then((text) => {
+      if (!text) return;
+      addLine(st.speaker, text); enhanceDirty = true; maybeTitle();
+      const f = chunkFlags();
+      if (f.map_enabled || f.terms_enabled || f.fact_check_enabled) {
+        wsSend(Object.assign({ type: 'text_chunk', text, speaker: st.speaker, tool: currentTool, mode: 'general' }, f));
+      }
+    });
+  } else {
+    // Fallback: server-side transcription (Gemini) for non-macOS-26 / Windows.
+    wsSend(Object.assign({ type: 'audio_chunk', audio: b64, mime_type: 'audio/wav', tool: currentTool, mode: 'general', speaker: st.speaker }, chunkFlags()));
+  }
+}
 async function startListening() {
   if (!ws || ws.readyState > 1) connect();
   audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR }); muteSink = audioCtx.createGain(); muteSink.gain.value = 0; muteSink.connect(audioCtx.destination); pipelines = [];
@@ -174,6 +194,7 @@ function init() {
   injectIcons();
   loadAll();
   hydrate(); setTab(S.tab || 'notes');
+  if (window.gideon && window.gideon.sttAvailable) window.gideon.sttAvailable().then((v) => { localSTT = !!v; });
 
   $('title').addEventListener('input', () => { S.title = $('title').textContent.trim(); titleRequested = true; save(); });
   $('editor').addEventListener('input', () => { S.notes = $('editor').innerText; save(); });

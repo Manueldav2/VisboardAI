@@ -26,6 +26,9 @@
       "preload.js",
       "renderer/**/*"
     ],
+    "extraResources": [
+      { "from": "bin", "to": "bin" }
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [

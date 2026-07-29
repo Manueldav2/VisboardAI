@@ -1,6 +1,27 @@
 const { app, BrowserWindow, ipcMain, systemPreferences, globalShortcut, desktopCapturer, session, screen, Tray, Menu, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
+
+// ── On-device transcription (yap → Apple SpeechAnalyzer, macOS 26+) ──
+// Free, private, ~0.6s/utterance. We call yap in file-transcribe mode, so yap
+// itself needs no mic/screen permission — Electron already captures the audio.
+function resolveYap() {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'bin', 'yap'),
+    path.join(__dirname, 'bin', 'yap'),
+    '/opt/homebrew/bin/yap',
+    '/usr/local/bin/yap',
+  ];
+  for (const c of candidates) { try { if (c && fs.existsSync(c)) return c; } catch {} }
+  return 'yap';
+}
+const YAP = resolveYap();
+let yapOk = false;
+function checkYap() {
+  execFile(YAP, ['--help'], { timeout: 5000 }, (err) => { yapOk = !err; });
+}
 
 let win = null;
 let tray = null;
@@ -177,6 +198,7 @@ async function ensureMic() {
 app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide(); // live in the menu bar
   wireDisplayMedia();
+  checkYap();
   await ensureMic();
   createWindow();
   createTray();
@@ -224,3 +246,20 @@ ipcMain.handle('drag-move', (_e, dx, dy) => {
   win.setPosition(Math.round(x), Math.round(y), false);
 });
 ipcMain.handle('drag-end', () => { dragOrigin = null; });
+
+// ── On-device STT IPC ──
+ipcMain.handle('stt-available', () => yapOk);
+ipcMain.handle('transcribe-wav', async (_e, b64) => {
+  if (!yapOk || !b64) return '';
+  const tmp = path.join(os.tmpdir(), `gideon-${Date.now()}-${Math.round(Math.random() * 1e9)}.wav`);
+  try {
+    fs.writeFileSync(tmp, Buffer.from(b64, 'base64'));
+    return await new Promise((resolve) => {
+      execFile(YAP, ['transcribe', tmp, '--txt'], { timeout: 20000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+        if (err) return resolve('');
+        resolve(String(stdout || '').split('\n').map((s) => s.trim()).filter(Boolean).join(' ').trim());
+      });
+    });
+  } catch { return ''; }
+  finally { try { fs.unlinkSync(tmp); } catch {} }
+});
