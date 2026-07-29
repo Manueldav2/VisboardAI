@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, systemPreferences, globalShortcut, desktopCapturer, session, screen, Tray, Menu, nativeImage } = require('electron');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -27,24 +27,10 @@ let win = null;
 let tray = null;
 let clickThrough = false;
 
-function positionUnderTray() {
-  if (!win) return;
-  const b = win.getBounds();
-  let x, y;
-  if (tray) {
-    const t = tray.getBounds();
-    x = Math.round(t.x + t.width / 2 - b.width / 2);
-    y = Math.round(t.y + t.height + 6);
-  } else {
-    const wa = screen.getPrimaryDisplay().workArea;
-    x = wa.x + wa.width - b.width - 24; y = wa.y + 8;
-  }
-  const wa = screen.getPrimaryDisplay().workArea;
-  x = Math.max(wa.x + 6, Math.min(x, wa.x + wa.width - b.width - 6));
-  win.setPosition(x, y, false);
-}
-function showWin() { if (!win) return; positionUnderTray(); win.show(); win.focus(); }
-function toggleWin() { if (!win) return; if (win.isVisible()) win.hide(); else showWin(); }
+// Gideon is hidden by default (menu-bar only). It surfaces on its own when a
+// meeting is detected (toast), or when you open it from the tray/hotkey.
+function showWin() { openPanel(); }
+function toggleWin() { if (!win) return; if (win.isVisible() && viewState === 'panel') hideWin(); else openPanel(); }
 
 function createTray() {
   const img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'trayTemplate.png'));
@@ -108,42 +94,40 @@ function checkMeeting() {
 const PILL = { width: 42, height: 104 };
 const PANEL = { width: 440, height: 640 };
 const TOAST = { width: 268, height: 60 };
-let viewState = 'pill'; // 'pill' | 'toast' | 'panel'
+let viewState = 'hidden'; // 'hidden' | 'toast' | 'panel'
 
-function anchorRight(size) {
-  // Keep the window's top-right corner fixed while it grows/shrinks.
-  const b = win.getBounds();
-  const rightEdge = b.x + b.width, top = b.y;
+function anchorTopRight(size) {
+  // Park the window in the top-right corner under the menu bar (Granola-style).
   const wa = screen.getPrimaryDisplay().workArea;
-  let x = Math.round(rightEdge - size.width);
-  x = Math.max(wa.x + 6, Math.min(x, wa.x + wa.width - size.width - 6));
-  const y = Math.max(wa.y + 4, Math.min(top, wa.y + wa.height - size.height - 6));
+  const x = wa.x + wa.width - size.width - 12;
+  const y = wa.y + 8;
   return { x, y, width: size.width, height: size.height };
 }
-function expandWin() {
-  if (!win || viewState === 'panel') return;
+function openPanel() {
+  if (!win) return;
   viewState = 'panel';
   win.setResizable(false);
-  win.setBounds(anchorRight(PANEL), false);
+  win.setBounds(anchorTopRight(PANEL), false);
   win.webContents.send('view', 'panel');
-  win.focus();
+  win.show(); win.focus();
 }
-function collapseWin() {
-  if (!win || viewState === 'pill') return;
-  viewState = 'pill';
-  win.setBounds(anchorRight(PILL), false);
+function hideWin() {
+  if (!win) return;
+  viewState = 'hidden';
   win.webContents.send('view', 'pill');
+  win.hide();
 }
 function showToast() {
-  if (!win || viewState !== 'pill') return; // never interrupt an open panel
+  if (!win || viewState === 'panel') return; // don't cover an open panel
   viewState = 'toast';
-  win.setBounds(anchorRight(TOAST), false);
+  win.setBounds(anchorTopRight(TOAST), false);
   win.webContents.send('view', 'toast');
+  win.showInactive(); // appear without stealing focus
 }
-function hideToast() {
-  if (!win || viewState !== 'toast') return;
-  collapseWin();
-}
+// Back-compat names used by IPC + meeting detection.
+function expandWin() { openPanel(); }
+function collapseWin() { hideWin(); }
+function hideToast() { if (viewState === 'toast') hideWin(); }
 
 function createWindow() {
   const wa = screen.getPrimaryDisplay().workArea;
@@ -171,7 +155,8 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  win.once('ready-to-show', () => win.show());
+  // Do NOT show on launch — Gideon lives in the menu bar and pops up on its own
+  // when a meeting is detected, or when opened from the tray/hotkey.
 
   // Float above everything, follow across spaces + fullscreen apps.
   win.setAlwaysOnTop(true, 'screen-saver');
@@ -204,12 +189,9 @@ app.whenReady().then(async () => {
   createTray();
 
   // Global hotkeys
-  globalShortcut.register('CommandOrControl+\\', () => {
-    if (!win) return;
-    if (win.isVisible()) win.hide(); else { win.show(); win.focus(); }
-  });
-  globalShortcut.register('CommandOrControl+Shift+L', () => win && win.webContents.send('hotkey-listen'));
-  globalShortcut.register('CommandOrControl+Shift+A', () => { if (win) { win.show(); win.focus(); win.webContents.send('hotkey-ask'); } });
+  globalShortcut.register('CommandOrControl+\\', () => toggleWin());
+  globalShortcut.register('CommandOrControl+Shift+L', () => { openPanel(); if (win) win.webContents.send('hotkey-listen'); });
+  globalShortcut.register('CommandOrControl+Shift+A', () => { openPanel(); if (win) win.webContents.send('hotkey-ask'); });
 
   setInterval(checkMeeting, 5000);
   setTimeout(checkMeeting, 1500);
@@ -217,7 +199,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => { globalShortcut.unregisterAll(); stopStream(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 ipcMain.handle('set-always-on-top', (_e, v) => { if (win) win.setAlwaysOnTop(!!v, 'screen-saver'); return !!v; });
@@ -247,19 +229,43 @@ ipcMain.handle('drag-move', (_e, dx, dy) => {
 });
 ipcMain.handle('drag-end', () => { dragOrigin = null; });
 
-// ── On-device STT IPC ──
+// ── On-device STT: live streaming via yap (Apple SpeechAnalyzer) ──
+let sttProc = null;
+function stopStream() {
+  if (sttProc) { try { sttProc.kill('SIGINT'); } catch {} try { sttProc.kill('SIGKILL'); } catch {} sttProc = null; }
+}
+function startStream(opts) {
+  stopStream();
+  if (!yapOk) return false;
+  const mic = opts.mic !== false, sys = opts.system !== false;
+  let args, fallbackSpeaker;
+  if (mic && sys) { args = ['listen-and-dictate', '--srt', '--max-length', '220', '--mic-label', 'You', '--system-label', 'Them']; fallbackSpeaker = 'You'; }
+  else if (sys) { args = ['listen', '--srt', '--max-length', '220']; fallbackSpeaker = 'Them'; }
+  else { args = ['dictate', '--srt', '--max-length', '220']; fallbackSpeaker = 'You'; }
+  try { sttProc = spawn(YAP, args, { stdio: ['ignore', 'pipe', 'pipe'] }); }
+  catch { sttProc = null; return false; }
+
+  let buf = '';
+  const proc = sttProc;
+  const emit = (block) => {
+    const lines = block.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!lines.length) return;
+    const textLine = lines[lines.length - 1]; // "Speaker: text" (or bare text)
+    const m = textLine.match(/^(You|Them|Mic|System)\s*:\s*(.*)$/);
+    let speaker = fallbackSpeaker, text = textLine;
+    if (m) { speaker = (m[1] === 'Them' || m[1] === 'System') ? 'Them' : 'You'; text = m[2]; }
+    text = text.trim();
+    if (text && win && !win.isDestroyed()) win.webContents.send('stt-segment', { speaker, text });
+  };
+  proc.stdout.on('data', (d) => {
+    buf += d.toString();
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) { const block = buf.slice(0, i); buf = buf.slice(i + 2); emit(block); }
+  });
+  proc.stderr.on('data', (d) => { const s = String(d); if (/permission|denied|not available/i.test(s) && win) win.webContents.send('stt-error', s.trim().slice(0, 200)); });
+  proc.on('close', () => { if (sttProc === proc) sttProc = null; });
+  return true;
+}
 ipcMain.handle('stt-available', () => yapOk);
-ipcMain.handle('transcribe-wav', async (_e, b64) => {
-  if (!yapOk || !b64) return '';
-  const tmp = path.join(os.tmpdir(), `gideon-${Date.now()}-${Math.round(Math.random() * 1e9)}.wav`);
-  try {
-    fs.writeFileSync(tmp, Buffer.from(b64, 'base64'));
-    return await new Promise((resolve) => {
-      execFile(YAP, ['transcribe', tmp, '--txt'], { timeout: 20000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
-        if (err) return resolve('');
-        resolve(String(stdout || '').split('\n').map((s) => s.trim()).filter(Boolean).join(' ').trim());
-      });
-    });
-  } catch { return ''; }
-  finally { try { fs.unlinkSync(tmp); } catch {} }
-});
+ipcMain.handle('stt-start', (_e, opts) => startStream(opts || {}));
+ipcMain.handle('stt-stop', () => { stopStream(); });

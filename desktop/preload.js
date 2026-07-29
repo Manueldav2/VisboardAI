@@ -18,5 +18,8 @@ contextBridge.exposeInMainWorld('gideon', {
   dragMove: (dx, dy) => ipcRenderer.invoke('drag-move', dx, dy),
   dragEnd: () => ipcRenderer.invoke('drag-end'),
   sttAvailable: () => ipcRenderer.invoke('stt-available'),
-  transcribeWav: (b64) => ipcRenderer.invoke('transcribe-wav', b64),
+  sttStart: (opts) => ipcRenderer.invoke('stt-start', opts),
+  sttStop: () => ipcRenderer.invoke('stt-stop'),
+  onSttSegment: (cb) => ipcRenderer.on('stt-segment', (_e, seg) => cb(seg)),
+  onSttError: (cb) => ipcRenderer.on('stt-error', (_e, msg) => cb(msg)),
 });

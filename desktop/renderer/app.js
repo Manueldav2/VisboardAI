@@ -148,42 +148,53 @@ function chunkFlags() {
     fact_check_enabled: S.tab === 'map' && currentTool === 'argument_ref',
   };
 }
+// Fallback only (non-macOS-26 / Windows): server-side transcription via Gemini.
 function flush(st) {
   if (!st.plen) return;
   const merged = new Float32Array(st.plen); let off = 0;
   for (const b of st.pending) { merged.set(b, off); off += b.length; }
   st.pending = []; st.plen = 0; st.hasSpeech = false;
-  const b64 = abToB64(encodeWav(merged, SR));
-  if (localSTT && window.gideon && window.gideon.transcribeWav) {
-    // Transcribe on-device (free); only ping the backend for on-demand AI.
-    window.gideon.transcribeWav(b64).then((text) => {
-      if (!text) return;
-      addLine(st.speaker, text); enhanceDirty = true; maybeTitle();
-      const f = chunkFlags();
-      if (f.map_enabled || f.terms_enabled || f.fact_check_enabled) {
-        wsSend(Object.assign({ type: 'text_chunk', text, speaker: st.speaker, tool: currentTool, mode: 'general' }, f));
-      }
-    });
-  } else {
-    // Fallback: server-side transcription (Gemini) for non-macOS-26 / Windows.
-    wsSend(Object.assign({ type: 'audio_chunk', audio: b64, mime_type: 'audio/wav', tool: currentTool, mode: 'general', speaker: st.speaker }, chunkFlags()));
+  wsSend(Object.assign({ type: 'audio_chunk', audio: abToB64(encodeWav(merged, SR)), mime_type: 'audio/wav', tool: currentTool, mode: 'general', speaker: st.speaker }, chunkFlags()));
+}
+function listenUI(on) {
+  listening = on;
+  document.body.classList.toggle('listening', on);
+  $('listen').classList.toggle('live', on);
+  $('listen-label').textContent = on ? 'Stop' : 'Listen';
+  $('rec').classList.toggle('hidden', !on);
+  if (on) { recStart = Date.now(); recTimer = setInterval(() => { const s = Math.floor((Date.now() - recStart) / 1000); $('rec-time').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }, 500); setStatus('Listening'); }
+  else { clearInterval(recTimer); setStatus('Paused'); }
+}
+// Called on each finalized sentence from the on-device streaming transcriber.
+function onSegment(seg) {
+  if (!listening || !seg || !seg.text) return;
+  addLine(seg.speaker, seg.text); enhanceDirty = true; maybeTitle();
+  const f = chunkFlags();
+  if (f.map_enabled || f.terms_enabled || f.fact_check_enabled) {
+    wsSend(Object.assign({ type: 'text_chunk', text: seg.text, speaker: seg.speaker, tool: currentTool, mode: 'general' }, f));
   }
 }
 async function startListening() {
+  const src = $('source').value;
+  if (localSTT && window.gideon && window.gideon.sttStart) {
+    // Real-time on-device streaming (Apple SpeechAnalyzer via yap).
+    const ok = await window.gideon.sttStart({ mic: src === 'mic' || src === 'both', system: src === 'system' || src === 'both' });
+    if (ok) { if (!ws || ws.readyState > 1) connect(); listenUI(true); return; }
+    localSTT = false; // yap failed to start → fall back
+  }
+  // Fallback: browser capture → Gemini transcription.
   if (!ws || ws.readyState > 1) connect();
   audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR }); muteSink = audioCtx.createGain(); muteSink.gain.value = 0; muteSink.connect(audioCtx.destination); pipelines = [];
-  const src = $('source').value;
   if (src === 'mic' || src === 'both') { try { pipelines.push(makePipeline(await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }), 'You')); } catch { setStatus('Mic permission needed'); } }
   if (src === 'system' || src === 'both') { try { const s = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true }); s.getVideoTracks().forEach((t) => t.stop()); if (s.getAudioTracks().length) pipelines.push(makePipeline(s, 'Them')); else setStatus('Enable Screen Recording for system audio'); } catch { if (!pipelines.length) setStatus('System audio unavailable'); } }
   if (!pipelines.length) { stopListening(); return; }
-  listening = true; document.body.classList.add('listening'); $('listen').classList.add('live'); $('listen-label').textContent = 'Stop'; $('rec').classList.remove('hidden'); recStart = Date.now();
-  recTimer = setInterval(() => { const s = Math.floor((Date.now() - recStart) / 1000); $('rec-time').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }, 500);
-  setStatus('Listening');
+  listenUI(true);
 }
 function stopListening() {
-  listening = false; document.body.classList.remove('listening'); $('listen').classList.remove('live'); $('listen-label').textContent = 'Listen'; $('rec').classList.add('hidden'); clearInterval(recTimer);
+  if (window.gideon && window.gideon.sttStop) window.gideon.sttStop();
+  listenUI(false);
   for (const p of pipelines) { try { p.proc.disconnect(); } catch {} try { p.src.disconnect(); } catch {} try { p.stream.getTracks().forEach((t) => t.stop()); } catch {} }
-  pipelines = []; try { if (audioCtx) audioCtx.close(); } catch {} audioCtx = null; setStatus('Paused');
+  pipelines = []; try { if (audioCtx) audioCtx.close(); } catch {} audioCtx = null;
   if (enhanceDirty && S.lines.length) doEnhance();
 }
 function encodeWav(samples, rate) { const buf = new ArrayBuffer(44 + samples.length * 2), v = new DataView(buf); const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }; w(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, samples.length * 2, true); let o = 44; for (let i = 0; i < samples.length; i++) { let s = Math.max(-1, Math.min(1, samples[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; } return buf; }
@@ -195,6 +206,8 @@ function init() {
   loadAll();
   hydrate(); setTab(S.tab || 'notes');
   if (window.gideon && window.gideon.sttAvailable) window.gideon.sttAvailable().then((v) => { localSTT = !!v; });
+  if (window.gideon && window.gideon.onSttSegment) window.gideon.onSttSegment(onSegment);
+  if (window.gideon && window.gideon.onSttError) window.gideon.onSttError((msg) => { setStatus(/screen/i.test(msg) ? 'Allow Screen Recording' : /mic/i.test(msg) ? 'Allow Microphone' : 'Mic/Screen permission needed'); });
 
   $('title').addEventListener('input', () => { S.title = $('title').textContent.trim(); titleRequested = true; save(); });
   $('editor').addEventListener('input', () => { S.notes = $('editor').innerText; save(); });

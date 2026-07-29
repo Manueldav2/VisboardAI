@@ -27,17 +27,16 @@ body { font-family: var(--font); color: var(--text); -webkit-font-smoothing: ant
 
 /* ── Pill ── */
 .pill {
-  /* Sit inside the transparent window with a hair of margin so the capsule's
-     drop-shadow isn't clipped into a rectangle by the window edge. */
-  position: absolute; inset: 3px; user-select: none; -webkit-user-select: none;
+  /* SOLID, opaque capsule — no translucency and no outer shadow, so the
+     transparent window shows nothing but the rounded pill (no clipped box). */
+  position: absolute; inset: 2px; user-select: none; -webkit-user-select: none;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-  border: 1px solid rgba(255,255,255,.1); border-radius: 999px; cursor: grab;
-  background: linear-gradient(180deg, rgba(30,27,22,.95), rgba(15,13,11,.95));
-  -webkit-backdrop-filter: blur(24px) saturate(1.3); backdrop-filter: blur(24px) saturate(1.3);
-  box-shadow: 0 8px 22px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
-  transition: transform .16s cubic-bezier(.2,.8,.2,1), box-shadow .2s ease, border-color .2s ease;
+  border: 1px solid rgba(255,255,255,.13); border-radius: 999px; cursor: grab;
+  background: #1a1712;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+  transition: transform .16s cubic-bezier(.2,.8,.2,1), border-color .2s ease;
 }
-.pill:hover { transform: scale(1.05); border-color: rgba(212,166,74,.32); box-shadow: 0 10px 26px rgba(0,0,0,.5), 0 0 0 1px rgba(212,166,74,.16), inset 0 1px 0 rgba(255,255,255,.1); }
+.pill:hover { transform: scale(1.05); border-color: rgba(212,166,74,.4); }
 .pill.grabbing { cursor: grabbing; transform: scale(.96); transition: transform .08s ease; }
 .pill-logo { position: relative; width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); box-shadow: 0 2px 9px rgba(212,166,74,.45), inset 0 1px 0 rgba(255,255,255,.4); }
 .pill-logo svg { width: 17px; height: 17px; }
@@ -182,7 +181,7 @@ body.toast .mbanner { top: 8px; left: 8px; right: 8px; }
 .status { flex: 1; text-align: right; font-size: 10.5px; color: var(--faint); }
 
 /* Meeting toast */
-.mbanner { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 50; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 13px; background: rgba(28,25,20,.94); backdrop-filter: blur(24px); border: 1px solid rgba(212,166,74,.2); box-shadow: 0 12px 34px rgba(0,0,0,.55); animation: drop .3s cubic-bezier(.2,.7,.2,1); }
+.mbanner { position: absolute; top: 6px; left: 6px; right: 6px; z-index: 50; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 14px; background: #1c1914; border: 1px solid rgba(212,166,74,.28); animation: drop .3s cubic-bezier(.2,.7,.2,1); }
 .mbanner.hidden { display: none; }
 @keyframes drop { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
 .mb-icon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); }
