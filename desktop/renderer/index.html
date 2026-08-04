@@ -64,7 +64,7 @@
       </section>
 
       <section id="v-transcript" class="view">
-        <div class="view-head"><span>Transcript</span><button id="export" class="mini">Export</button></div>
+        <div class="view-head"><span>Transcript</span><div class="toolbar-right"><button id="copy-transcript" class="wbtn" title="Copy transcript" data-icon="copy"></button><button id="export" class="mini">Export</button></div></div>
         <div id="transcript" class="transcript"></div>
         <div id="transcript-empty" class="view-empty">Everything said shows up here — attributed and saved.</div>
       </section>
@@ -76,6 +76,7 @@
             <button class="chip" data-tool="architect">Architect</button>
             <button class="chip" data-tool="argument_ref">Debate</button>
           </div>
+          <button id="copy-map" class="wbtn" title="Copy diagram (Mermaid)" data-icon="copy"></button>
         </div>
         <div id="map" class="map"></div>
         <div class="map-ctrl hidden" id="map-ctrl">
@@ -92,7 +93,7 @@
       </section>
 
       <section id="v-terms" class="view">
-        <div class="view-head"><span>Terms &amp; jargon</span></div>
+        <div class="view-head"><span>Terms &amp; jargon</span><button id="copy-terms" class="wbtn" title="Copy terms" data-icon="copy"></button></div>
         <div id="terms" class="terms"></div>
         <div id="terms-empty" class="view-empty">Acronyms &amp; jargon (CAC, LP, ARR…) get explained here as they’re said.</div>
       </section>

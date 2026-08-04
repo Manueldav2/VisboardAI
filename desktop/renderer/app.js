@@ -274,15 +274,21 @@ function init() {
   $('tg-mine').addEventListener('click', () => showEnhanced(false));
   $('tg-enh').addEventListener('click', () => { if (S.enhanced) showEnhanced(true); else doEnhance(); });
   $('enhance').addEventListener('click', doEnhance);
-  $('copy-notes').addEventListener('click', () => {
-    const showingEnhanced = $('tg-enh').classList.contains('on') && S.enhanced;
-    const text = showingEnhanced ? S.enhanced : ($('editor').innerText || S.notes || '');
-    if (!text.trim()) return;
+  function copyToClip(text, btn) {
+    if (!text || !text.trim()) return;
     navigator.clipboard.writeText(text).then(() => {
-      const b = $('copy-notes'); b.innerHTML = ICONS.check; b.classList.add('ok');
-      setTimeout(() => { b.innerHTML = ICONS.copy; b.classList.remove('ok'); }, 1300);
+      btn.innerHTML = ICONS.check; btn.classList.add('ok');
+      setTimeout(() => { btn.innerHTML = ICONS.copy; btn.classList.remove('ok'); }, 1300);
     }).catch(() => {});
+  }
+  const transcriptFull = () => S.lines.map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n');
+  $('copy-notes').addEventListener('click', (e) => {
+    const showingEnhanced = $('tg-enh').classList.contains('on') && S.enhanced;
+    copyToClip(showingEnhanced ? S.enhanced : ($('editor').innerText || S.notes || ''), e.currentTarget);
   });
+  $('copy-transcript').addEventListener('click', (e) => copyToClip(transcriptFull(), e.currentTarget));
+  $('copy-terms').addEventListener('click', (e) => copyToClip(S.terms.map((t) => `${t.term}: ${t.definition}`).join('\n'), e.currentTarget));
+  $('copy-map').addEventListener('click', (e) => copyToClip(S.mermaid[currentTool] || '', e.currentTarget));
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setTab(b.dataset.tab); });
   $('modes').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); currentTool = b.dataset.tool; S.mode = currentTool; save(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); renderMap(); if (mapArmed && !S.mermaid[currentTool]) mapNow(); });
   $('map-start').addEventListener('click', armMapping);
