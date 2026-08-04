@@ -20,6 +20,8 @@ const ICONS = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.2"/><path d="M20 20l-3.6-3.6"/></svg>',
   minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.5 12h13"/></svg>',
   fit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.5H4.5V7M16 3.5h3.5V7M8 20.5H4.5V17M16 20.5h3.5V17"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
 };
 function injectIcons(root) { (root || document).querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = ICONS[el.dataset.icon] || ''; }); }
 
@@ -245,6 +247,15 @@ function init() {
   $('tg-mine').addEventListener('click', () => showEnhanced(false));
   $('tg-enh').addEventListener('click', () => { if (S.enhanced) showEnhanced(true); else doEnhance(); });
   $('enhance').addEventListener('click', doEnhance);
+  $('copy-notes').addEventListener('click', () => {
+    const showingEnhanced = $('tg-enh').classList.contains('on') && S.enhanced;
+    const text = showingEnhanced ? S.enhanced : ($('editor').innerText || S.notes || '');
+    if (!text.trim()) return;
+    navigator.clipboard.writeText(text).then(() => {
+      const b = $('copy-notes'); b.innerHTML = ICONS.check; b.classList.add('ok');
+      setTimeout(() => { b.innerHTML = ICONS.copy; b.classList.remove('ok'); }, 1300);
+    }).catch(() => {});
+  });
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setTab(b.dataset.tab); });
   $('modes').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); currentTool = b.dataset.tool; S.mode = currentTool; save(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); renderMap(); if (mapArmed && !S.mermaid[currentTool]) mapNow(); });
   $('map-start').addEventListener('click', armMapping);
