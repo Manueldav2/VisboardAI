@@ -4,6 +4,10 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
+// Debug log (helps diagnose tray/detection without a screen).
+const DBG = path.join(os.tmpdir(), 'gideon-debug.log');
+function dbg(...a) { try { fs.appendFileSync(DBG, `[${new Date().toISOString()}] ${a.join(' ')}\n`); } catch {} }
+
 // ── On-device transcription (yap → Apple SpeechAnalyzer, macOS 26+) ──
 // Free, private, ~0.6s/utterance. We call yap in file-transcribe mode, so yap
 // itself needs no mic/screen permission — Electron already captures the audio.
@@ -36,6 +40,7 @@ function createTray() {
   const img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'trayTemplate.png'));
   img.setTemplateImage(true);
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
+  dbg('tray created; imgEmpty=', img.isEmpty(), 'bounds=', JSON.stringify(tray.getBounds()));
   tray.setToolTip('Gideon — click to show, ⌘\\ to toggle');
   const menu = Menu.buildFromTemplate([
     { label: 'Show / Hide', accelerator: 'CommandOrControl+\\', click: toggleWin },
@@ -51,6 +56,7 @@ function createTray() {
 // ── Meeting detection (Granola-style) ──
 let meetingActive = false;
 let dismissedFor = null;
+let appListening = false;
 const OSA = [
   'tell application "System Events"',
   'set fa to name of first application process whose frontmost is true',
@@ -62,38 +68,66 @@ const OSA = [
   'end tell',
   'return fa & "|||" & wt',
 ];
-function checkMeeting() {
-  if (process.platform !== 'darwin' || !win) return;
-  const args = [];
-  OSA.forEach((l) => { args.push('-e', l); });
-  execFile('osascript', args, { timeout: 4000 }, (err, stdout) => {
-    if (err) return; // no Accessibility permission — skip silently
-    const hay = String(stdout || '').trim().toLowerCase().replace('|||', ' ');
-    const isMeeting =
-      /zoom\.us|zoom meeting|meet\.google|google meet|hangouts call|microsoft teams|teams meeting|webex|whereby|gather\.town|around\.co|huddle|riverside\.fm/.test(hay) ||
-      /\bmeet\b\s*[\-–—·]/.test(hay) || /[\-–—·]\s*meet\b/.test(hay);
-    const name = /zoom/.test(hay) ? 'Zoom' : /teams/.test(hay) ? 'Microsoft Teams'
-      : /webex/.test(hay) ? 'Webex' : /meet/.test(hay) ? 'Google Meet' : 'a meeting';
-    if (isMeeting && !meetingActive) {
-      meetingActive = true;
-      if (dismissedFor !== name) {
-        if (!win.isVisible()) win.showInactive();
-        win.webContents.send('meeting-detected', name);
-        // Small corner nudge, not the whole app — Granola-style.
-        showToast();
-      }
-    } else if (!isMeeting && meetingActive) {
-      meetingActive = false;
-      dismissedFor = null;
-      win.webContents.send('meeting-cleared');
-      hideToast();
-    }
+function resolveBin(name) {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'bin', name),
+    path.join(__dirname, 'bin', name),
+  ];
+  for (const c of candidates) { try { if (c && fs.existsSync(c)) return c; } catch {} }
+  return null;
+}
+const CAMSTATE = resolveBin('camstate');
+const CALLSTATE = resolveBin('callstate');
+function cameraInUse() {
+  return new Promise((resolve) => {
+    if (!CAMSTATE) return resolve(false);
+    execFile(CAMSTATE, [], { timeout: 3000 }, (err, out) => resolve(!err && String(out).trim() === '1'));
   });
+}
+// A single process doing mic + speaker at once = a live call (audio or video).
+// Ignores music (speaker only) and always-on dictation apps (mic only).
+function callInProgress() {
+  return new Promise((resolve) => {
+    if (!CALLSTATE) return resolve(false);
+    execFile(CALLSTATE, [], { timeout: 3000 }, (err, out) => resolve(!err && String(out).trim() === '1'));
+  });
+}
+function frontWindowTitle() {
+  return new Promise((resolve) => {
+    const args = []; OSA.forEach((l) => { args.push('-e', l); });
+    execFile('osascript', args, { timeout: 4000 }, (err, stdout) => resolve(err ? '' : String(stdout || '').trim().toLowerCase().replace('|||', ' ')));
+  });
+}
+async function checkMeeting() {
+  if (process.platform !== 'darwin' || !win) return;
+  if (appListening) return; // already capturing — don't nudge
+  const [cam, call, hay] = await Promise.all([cameraInUse(), callInProgress(), frontWindowTitle()]);
+  const titleMeeting =
+    /zoom\.us|zoom meeting|meet\.google|google meet|hangouts call|microsoft teams|teams meeting|webex|whereby|gather\.town|around\.co|huddle|riverside\.fm/.test(hay) ||
+    /\bmeet\b\s*[\-–—·]/.test(hay) || /[\-–—·]\s*meet\b/.test(hay);
+  const isMeeting = cam || call || titleMeeting;
+  dbg('detect cam=', cam, 'call=', call, 'title=', titleMeeting, 'front=', hay.slice(0, 60));
+  const name = /zoom/.test(hay) ? 'Zoom' : /teams/.test(hay) ? 'Microsoft Teams'
+    : /webex/.test(hay) ? 'Webex' : /meet/.test(hay) ? 'Google Meet' : cam ? 'a video call' : 'a call';
+  if (isMeeting && !meetingActive) {
+    meetingActive = true;
+    if (dismissedFor !== name) {
+      dbg('MEETING DETECTED:', name, '→ toast');
+      if (!win.isVisible()) win.showInactive();
+      win.webContents.send('meeting-detected', name);
+      showToast();
+    }
+  } else if (!isMeeting && meetingActive) {
+    meetingActive = false;
+    dismissedFor = null;
+    win.webContents.send('meeting-cleared');
+    hideToast();
+  }
 }
 
 const PILL = { width: 42, height: 104 };
 const PANEL = { width: 440, height: 640 };
-const TOAST = { width: 268, height: 60 };
+const TOAST = { width: 344, height: 74 };
 let viewState = 'hidden'; // 'hidden' | 'toast' | 'panel'
 
 function anchorTopRight(size) {
@@ -105,6 +139,7 @@ function anchorTopRight(size) {
 }
 function openPanel() {
   if (!win) return;
+  dbg('openPanel called');
   viewState = 'panel';
   win.setResizable(false);
   win.setBounds(anchorTopRight(PANEL), false);
@@ -155,8 +190,10 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  // Do NOT show on launch — Gideon lives in the menu bar and pops up on its own
-  // when a meeting is detected, or when opened from the tray/hotkey.
+  // Open once on launch so Gideon is discoverable (menu-bar icons can hide
+  // behind the notch). After you collapse it, it lives in the menu bar and
+  // pops up on its own when a meeting is detected.
+  win.once('ready-to-show', () => openPanel());
 
   // Float above everything, follow across spaces + fullscreen apps.
   win.setAlwaysOnTop(true, 'screen-saver');
@@ -267,5 +304,5 @@ function startStream(opts) {
   return true;
 }
 ipcMain.handle('stt-available', () => yapOk);
-ipcMain.handle('stt-start', (_e, opts) => startStream(opts || {}));
-ipcMain.handle('stt-stop', () => { stopStream(); });
+ipcMain.handle('stt-start', (_e, opts) => { appListening = true; return startStream(opts || {}); });
+ipcMain.handle('stt-stop', () => { appListening = false; stopStream(); });

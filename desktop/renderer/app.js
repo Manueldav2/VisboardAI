@@ -51,7 +51,7 @@ mermaid.initialize({ startOnLoad: false, suppressErrorRendering: true, theme: 'b
   flowchart: { curve: 'basis', padding: 16, nodeSpacing: 50, rankSpacing: 50, htmlLabels: true } });
 async function renderMap() {
   const code = S.mermaid[currentTool];
-  if (!code) { $('map').innerHTML = ''; $('map-empty').style.display = ''; return; }
+  if (!code) { $('map').innerHTML = ''; $('map-empty').style.display = ''; renderMapState(); return; }
   try {
     const { svg } = await mermaid.render('mm-' + Date.now(), code);
     $('map').innerHTML = svg; $('map-empty').style.display = 'none';
@@ -108,7 +108,13 @@ function maybeTitle() { if (S.title || titleRequested || S.lines.length < 3) ret
 // ── Tabs ──
 function transcriptText(n) { return S.lines.slice(-(n || 40)).map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n'); }
 function mapNow() { if (S.lines.length) { if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'map_now', text: transcriptText(30), tool: currentTool }); } }
-function setTab(t) { S.tab = t; save(); document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t)); document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + t)); if (t === 'map') { renderMap(); if (!S.mermaid[currentTool]) mapNow(); } if (t === 'terms' && !S.terms.length && S.lines.length) requestTermsOnce(); }
+function setTab(t) { S.tab = t; save(); document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t)); document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + t)); if (t === 'map') { renderMap(); renderMapState(); } if (t === 'terms' && !S.terms.length && S.lines.length) requestTermsOnce(); }
+function renderMapState() {
+  const startBtn = $('map-start'), txt = document.querySelector('.map-empty-text');
+  if (startBtn) startBtn.style.display = mapArmed ? 'none' : '';
+  if (txt) txt.textContent = mapArmed ? 'Listening — your diagram builds as you talk.' : 'Turn this conversation into a live diagram — only when you ask.';
+}
+function armMapping() { mapArmed = true; renderMapState(); mapNow(); setStatus('Mapping'); }
 let termsRequested = false;
 function requestTermsOnce() { if (termsRequested) return; termsRequested = true; if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'terms_now', text: transcriptText(60) }); }
 
@@ -126,7 +132,7 @@ function hydrate() {
   $('enhanced').innerHTML = S.enhanced ? mdToHtml(S.enhanced) : '';
   currentTool = S.mode || 'thought_plot'; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c.dataset.tool === currentTool));
   renderTranscript(); renderTerms(); renderMap(); $('asks').innerHTML = ''; $('chat-empty').style.display = ''; showEnhanced(false);
-  $('meta-date').textContent = relTime(S.date); titleRequested = !!S.title; termsRequested = false;
+  $('meta-date').textContent = relTime(S.date); titleRequested = !!S.title; termsRequested = false; mapArmed = false;
 }
 function openNote(id) { save(); const n = NOTES.find((x) => x.id === id); if (!n) return; Object.assign(S, JSON.parse(JSON.stringify(n))); hydrate(); setTab('notes'); closeLibrary(); }
 function newNote() { if (listening) stopListening(); save(); Object.assign(S, freshSession()); hydrate(); setTab('notes'); closeLibrary(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); }
@@ -141,11 +147,12 @@ function makePipeline(stream, speaker) {
 // AI runs on-demand only: transcription is always on, but the map / fact-check /
 // terms passes fire only while you're actually viewing that panel. Default
 // listening = transcribe + save, nothing else billed.
+let mapArmed = false; // the map only builds after you press "Start mapping"
 function chunkFlags() {
   return {
-    map_enabled: S.tab === 'map',
+    map_enabled: S.tab === 'map' && mapArmed,
     terms_enabled: S.tab === 'terms',
-    fact_check_enabled: S.tab === 'map' && currentTool === 'argument_ref',
+    fact_check_enabled: S.tab === 'map' && mapArmed && currentTool === 'argument_ref',
   };
 }
 // Fallback only (non-macOS-26 / Windows): server-side transcription via Gemini.
@@ -215,7 +222,8 @@ function init() {
   $('tg-enh').addEventListener('click', () => { if (S.enhanced) showEnhanced(true); else doEnhance(); });
   $('enhance').addEventListener('click', doEnhance);
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setTab(b.dataset.tab); });
-  $('modes').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); currentTool = b.dataset.tool; S.mode = currentTool; save(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); renderMap(); if (!S.mermaid[currentTool]) mapNow(); });
+  $('modes').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); currentTool = b.dataset.tool; S.mode = currentTool; save(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); renderMap(); if (mapArmed && !S.mermaid[currentTool]) mapNow(); });
+  $('map-start').addEventListener('click', armMapping);
   $('ask-form').addEventListener('submit', (e) => { e.preventDefault(); const q = $('ask-input').value.trim(); if (!q) return; $('ask-input').value = ''; setTab('chat'); pendingAnswer = addAsk(q); if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'ask', text: q, context: S.lines.slice(-40).map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n') }); });
   $('export').addEventListener('click', () => { const md = [`# ${S.title || 'Meeting notes'}`, '', S.enhanced || '', '', '## Transcript', ...S.lines.map((l) => `**${l.who === 'them' ? 'Them' : 'You'}:** ${l.text}`)].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `gideon-${(S.title || 'notes').replace(/\s+/g, '-').toLowerCase()}.md`; a.click(); URL.revokeObjectURL(a.href); });
   $('new').addEventListener('click', newNote);
@@ -246,7 +254,14 @@ function init() {
     window.gideon.onMeetingDetected((name) => { if (listening) return; $('mb-app').textContent = name || 'a meeting'; $('mbanner').classList.remove('hidden'); });
     window.gideon.onMeetingCleared(() => $('mbanner').classList.add('hidden'));
   }
-  $('mb-take').addEventListener('click', () => { $('mbanner').classList.add('hidden'); $('source').value = 'both'; if (window.gideon) window.gideon.expand(); startListening(); });
+  $('mb-take').addEventListener('click', () => {
+    $('mbanner').classList.add('hidden');
+    // A detected meeting is a NEW note — don't append to the last one.
+    if (S.lines.length || (S.notes && S.notes.trim()) || S.enhanced) newNote();
+    $('source').value = 'both';
+    if (window.gideon) window.gideon.expand();
+    startListening();
+  });
   $('mb-x').addEventListener('click', () => { $('mbanner').classList.add('hidden'); if (window.gideon) { window.gideon.dismissMeeting($('mb-app').textContent); window.gideon.collapse(); } });
 
   connect();

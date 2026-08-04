@@ -157,7 +157,11 @@ body.toast .mbanner { top: 8px; left: 8px; right: 8px; }
 .map { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 12px; }
 .map:empty { display: none; }
 .map svg { max-width: none; height: auto; }
-.map-empty { text-align: center; margin: auto; }
+.map-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; text-align: center; margin: auto; }
+.map-empty-text { max-width: 250px; line-height: 1.5; }
+.map-start { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(212,166,74,.42); background: rgba(212,166,74,.12); color: var(--accent); cursor: pointer; font: 700 12.5px var(--font); padding: 9px 17px; border-radius: 999px; transition: all .15s; }
+.map-start:hover { background: rgba(212,166,74,.2); transform: translateY(-1px); }
+.map-start svg { width: 14px; height: 14px; }
 .modes { display: flex; gap: 3px; padding: 3px; border-radius: 999px; background: rgba(0,0,0,.25); }
 .chip { border: none; background: transparent; color: var(--muted); cursor: pointer; font: 600 11px var(--font); padding: 4px 10px; border-radius: 999px; transition: all .15s; }
 .chip.on { color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); }
@@ -181,14 +185,14 @@ body.toast .mbanner { top: 8px; left: 8px; right: 8px; }
 .status { flex: 1; text-align: right; font-size: 10.5px; color: var(--faint); }
 
 /* Meeting toast */
-.mbanner { position: absolute; top: 6px; left: 6px; right: 6px; z-index: 50; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 14px; background: #1c1914; border: 1px solid rgba(212,166,74,.28); animation: drop .3s cubic-bezier(.2,.7,.2,1); }
+.mbanner { position: absolute; top: 7px; left: 7px; right: 7px; bottom: 7px; z-index: 50; display: flex; align-items: center; gap: 11px; padding: 11px 13px; border-radius: 16px; background: #1c1914; border: 1px solid rgba(212,166,74,.3); animation: drop .3s cubic-bezier(.2,.7,.2,1); }
 .mbanner.hidden { display: none; }
 @keyframes drop { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
-.mb-icon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); }
-.mb-icon svg { width: 15px; height: 15px; }
-.mb-text { display: flex; flex-direction: column; line-height: 1.25; }
-.mb-text b { font-size: 12px; color: var(--text); } .mb-text span { font-size: 10.5px; color: var(--muted); }
-.mb-take { margin-left: auto; border: none; cursor: pointer; padding: 6px 12px; border-radius: 999px; font: 700 11px var(--font); color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); }
+.mb-icon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); }
+.mb-icon svg { width: 18px; height: 18px; }
+.mb-text { display: flex; flex-direction: column; line-height: 1.3; gap: 1px; }
+.mb-text b { font-size: 13px; color: var(--text); } .mb-text span { font-size: 11px; color: var(--muted); }
+.mb-take { margin-left: auto; border: none; cursor: pointer; padding: 8px 15px; border-radius: 999px; font: 700 12px var(--font); color: #0c0b09; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); flex-shrink: 0; }
 .mb-x { border: none; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 2px; }
 .mb-x svg { width: 14px; height: 14px; }
 .mb-x:hover { color: var(--text); }
