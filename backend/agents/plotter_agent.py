@@ -103,6 +103,70 @@ _RESPONSE_SCHEMA = {
 }
 
 
+_MAP_SYSTEM = (
+    "You are an expert at turning a meeting/conversation transcript into ONE clean, "
+    "coherent concept map (a Mermaid-style node/edge graph). You see the WHOLE "
+    "transcript at once — build a single well-organized diagram of it, not a pile of "
+    "fragments.\n\n"
+    "HOW TO BUILD IT:\n"
+    "1. Identify the 2-6 MAIN THEMES of the conversation. Make each a cluster.\n"
+    "2. Under each theme, add the key ENTITIES and POINTS — companies, people, "
+    "products, systems, metrics, decisions, ideas — as nodes, and connect them with "
+    "labeled edges that capture the real relationship ('prices at', 'integrates', "
+    "'competes with', 'proposes', 'blocked by', 'results in').\n"
+    "3. It must read like a map of the discussion: hierarchical, grouped, every node "
+    "connected into the graph. NO floating nodes, NO one giant text blob.\n"
+    "4. Attribute correctly: if a person proposed/claimed something, model that "
+    "('Manuel → proposes → Revenue share'), don't state opinions as facts.\n"
+    "5. Scale to the content: a short chat = 6-12 nodes; a full meeting = 18-35 nodes. "
+    "Labels 1-4 words. Node IDs lowercase_underscored. Prefer flowchart layout.\n\n"
+    "Return the COMPLETE graph (all nodes/edges/clusters) with should_plot=true. This "
+    "replaces any previous map."
+)
+
+
+async def map_conversation(transcript: str, mode: str = "general") -> dict | None:
+    """One-shot: build a complete, coherent concept map from a full transcript.
+
+    Unlike ``should_plot`` (incremental, per-chunk), this analyzes the entire
+    conversation at once so the diagram is organized and readable.
+    """
+    if not transcript.strip():
+        return None
+    try:
+        response = await _client.aio.models.generate_content(
+            model=MODEL,
+            contents=(
+                f"## Full transcript\n{transcript[:24000]}\n\n"
+                "Build the complete concept map now as a JSON object per the schema."
+            ),
+            config=genai.types.GenerateContentConfig(
+                system_instruction=_MAP_SYSTEM,
+                temperature=0.35,
+                max_output_tokens=4096,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
+                response_mime_type="application/json",
+                response_schema=_RESPONSE_SCHEMA,
+            ),
+        )
+        text = response.text
+        if not text:
+            return None
+        data = json.loads(text)
+        nodes = data.get("nodes", [])
+        if not nodes:
+            return None
+        return {
+            "nodes": nodes,
+            "edges": data.get("edges", []),
+            "clusters": data.get("clusters", []),
+            "graph_type": data.get("graph_type", "flowchart"),
+        }
+    except Exception:
+        logger.exception("map_conversation failed for mode=%s", mode)
+        return None
+
+
 async def should_plot(
     transcript_chunk: str,
     mode: str,

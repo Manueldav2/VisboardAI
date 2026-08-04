@@ -983,13 +983,27 @@ async def study_session_ws(websocket: WebSocket):
                 if not text:
                     continue
                 tool = message.get("tool", "thought_plot")
-                tool_graph = existing_graphs.setdefault(
-                    tool, {"nodes": [], "edges": [], "clusters": []}
-                )
                 plot_mode = tool if tool in ("argument_ref", "harvey") else "general"
-                asyncio.create_task(
-                    _general_chat_plot(websocket, text, "", tool_graph, tool=tool, plot_mode=plot_mode)
-                )
+
+                async def _map_whole():
+                    try:
+                        graph = await plotter_agent.map_conversation(text, mode=plot_mode)
+                        if not graph or not graph.get("nodes"):
+                            return
+                        # Holistic one-shot REPLACES the fragmented incremental graph.
+                        fresh = {"nodes": [], "edges": [], "clusters": []}
+                        _merge_graph(fresh, graph)
+                        existing_graphs[tool] = fresh
+                        mermaid_code = _graph_to_mermaid(fresh)
+                        if mermaid_code:
+                            await websocket.send_json({
+                                "type": "plot_update",
+                                "tool": tool,
+                                "graph": {**graph, "mermaid_code": mermaid_code},
+                            })
+                    except Exception:
+                        logger.debug("map_now failed", exc_info=True)
+                asyncio.create_task(_map_whole())
                 continue
 
             # TERMS NOW — one-shot jargon explainer over the transcript on demand.

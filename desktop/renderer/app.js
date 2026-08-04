@@ -21,6 +21,7 @@ const ICONS = {
   minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.5 12h13"/></svg>',
   fit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.5H4.5V7M16 3.5h3.5V7M8 20.5H4.5V17M16 20.5h3.5V17"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></svg>',
+  remap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 0 1 12.9-5.2M19.5 12a7.5 7.5 0 0 1-12.9 5.2"/><path d="M17.5 3.5v3.2h-3.2M6.5 20.5v-3.2h3.2"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
 };
 function injectIcons(root) { (root || document).querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = ICONS[el.dataset.icon] || ''; }); }
@@ -148,7 +149,7 @@ function maybeTitle() { if (S.title || titleRequested || S.lines.length < 3) ret
 
 // ── Tabs ──
 function transcriptText(n) { return S.lines.slice(-(n || 40)).map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n'); }
-function mapNow() { if (S.lines.length) { if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'map_now', text: transcriptText(30), tool: currentTool }); } }
+function mapNow() { if (S.lines.length) { if (!ws || ws.readyState > 1) connect(); const full = S.lines.map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n'); wsSend({ type: 'map_now', text: full, tool: currentTool }); } }
 function setTab(t) { S.tab = t; save(); document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t)); document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + t)); if (t === 'map') { renderMap(); renderMapState(); } if (t === 'terms' && !S.terms.length && S.lines.length) requestTermsOnce(); }
 function renderMapState() {
   const startBtn = $('map-start'), txt = document.querySelector('.map-empty-text');
@@ -191,7 +192,9 @@ function makePipeline(stream, speaker) {
 let mapArmed = false; // the map only builds after you press "Start mapping"
 function chunkFlags() {
   return {
-    map_enabled: S.tab === 'map' && mapArmed,
+    // Notes map is holistic/on-demand (the Start-mapping + re-map buttons), not
+    // live-fragmented. Architect/Debate still map live while viewing.
+    map_enabled: S.tab === 'map' && mapArmed && currentTool !== 'thought_plot',
     terms_enabled: S.tab === 'terms',
     fact_check_enabled: S.tab === 'map' && mapArmed && currentTool === 'argument_ref',
   };
@@ -295,6 +298,7 @@ function init() {
     $('map-zin').addEventListener('click', () => zoomMap(1.25));
     $('map-zout').addEventListener('click', () => zoomMap(0.8));
     $('map-fit').addEventListener('click', () => fitMap());
+    $('map-remap').addEventListener('click', () => { const b = $('map-remap'); b.classList.add('spin'); setStatus('Mapping'); mapNow(); setTimeout(() => b.classList.remove('spin'), 1200); });
   })();
   $('ask-form').addEventListener('submit', (e) => { e.preventDefault(); const q = $('ask-input').value.trim(); if (!q) return; $('ask-input').value = ''; setTab('chat'); pendingAnswer = addAsk(q); if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'ask', text: q, context: S.lines.map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n') }); });
   $('export').addEventListener('click', () => { const md = [`# ${S.title || 'Meeting notes'}`, '', S.enhanced || '', '', '## Transcript', ...S.lines.map((l) => `**${l.who === 'them' ? 'Them' : 'You'}:** ${l.text}`)].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `gideon-${(S.title || 'notes').replace(/\s+/g, '-').toLowerCase()}.md`; a.click(); URL.revokeObjectURL(a.href); });
