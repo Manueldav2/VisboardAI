@@ -233,8 +233,17 @@ app.whenReady().then(async () => {
   setInterval(checkMeeting, 5000);
   setTimeout(checkMeeting, 1500);
 
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  // Clicking the app (Spotlight/Finder/Dock) when it's already running as a
+  // hidden menu-bar agent → open the panel, so it always responds.
+  app.on('activate', () => { if (!win) createWindow(); openPanel(); });
 });
+
+// If a second launch happens, focus/open the existing instance instead of a no-op.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => { if (win) openPanel(); });
+}
 
 app.on('will-quit', () => { globalShortcut.unregisterAll(); stopStream(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
