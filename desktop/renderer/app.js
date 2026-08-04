@@ -115,7 +115,22 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({
 function mdInline(s) { return esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
 function badge(id, n) { const b = $(id); if (!b) return; b.textContent = n; b.classList.toggle('show', n > 0); }
 
-function addLine(who, text) { const w = /them|other|speaker/i.test(who) ? 'them' : 'you'; S.lines.push({ who: w, text }); if (S.lines.length > 20000) S.lines.shift(); renderTranscript(); save(); }
+function addLine(who, text) { const w = /them|other|speaker|system/i.test(who) ? 'them' : 'you'; S.lines.push({ who: w, text, _t: Date.now() }); if (S.lines.length > 20000) S.lines.shift(); renderTranscript(); save(); }
+// Acoustic-echo de-dup: on speakers, the mic ("You") re-hears the remote person
+// that system audio ("Them") already captured, so the same line lands twice.
+function normText(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function wordSim(a, b) { const A = a.split(' '), B = new Set(b.split(' ')); if (!A.length || !B.size) return 0; let i = 0; for (const w of A) if (B.has(w)) i++; return i / Math.max(A.length, B.size); }
+function echoDupIndex(who, text) {
+  const n = normText(text); if (n.length < 6) return -1;
+  const now = Date.now();
+  for (let i = S.lines.length - 1; i >= 0 && i >= S.lines.length - 16; i--) {
+    const l = S.lines[i]; if (!l._t || now - l._t > 14000) break;
+    if (l.who === who) continue; // only cross-speaker counts as echo
+    const m = normText(l.text); if (m.length < 6) continue;
+    if (m === n || (n.length > 14 && (m.includes(n) || n.includes(m))) || wordSim(m, n) > 0.6) return i;
+  }
+  return -1;
+}
 function renderTranscript() { const el = $('transcript'); $('transcript-empty').style.display = S.lines.length ? 'none' : ''; el.innerHTML = S.lines.map((l) => `<div class="tline"><span class="who ${l.who}">${l.who === 'them' ? 'Them' : 'You'}</span>${esc(l.text)}</div>`).join(''); el.scrollTop = el.scrollHeight; badge('b-transcript', S.lines.length); }
 function addTerms(terms) { let a = false; for (const t of terms) { if (!S.terms.some((x) => x.term.toLowerCase() === (t.term || '').toLowerCase())) { S.terms.push({ term: t.term, definition: t.definition }); a = true; } } if (a) { renderTerms(); save(); } }
 function renderTerms() { $('terms-empty').style.display = S.terms.length ? 'none' : ''; $('terms').innerHTML = S.terms.map((t) => `<div class="term"><b>${esc(t.term)}</b><span>${esc(t.definition)}</span></div>`).join(''); badge('b-terms', S.terms.length); }
@@ -201,10 +216,19 @@ function listenUI(on) {
 // Called on each finalized sentence from the on-device streaming transcriber.
 function onSegment(seg) {
   if (!listening || !seg || !seg.text) return;
-  addLine(seg.speaker, seg.text); enhanceDirty = true; maybeTitle();
+  const w = /them|system|other|speaker/i.test(seg.speaker) ? 'them' : 'you';
+  const dup = echoDupIndex(w, seg.text);
+  if (dup >= 0) {
+    // Shared content is the remote person (your own voice never plays back to
+    // system). If the clean "Them" arrives after a "You" echo, fix attribution.
+    const prev = S.lines[dup];
+    if (w === 'them' && prev.who === 'you') { prev.who = 'them'; prev.text = seg.text; prev._t = Date.now(); renderTranscript(); save(); }
+    return; // otherwise it's a pure echo duplicate — drop it
+  }
+  addLine(w, seg.text); enhanceDirty = true; maybeTitle();
   const f = chunkFlags();
   if (f.map_enabled || f.terms_enabled || f.fact_check_enabled) {
-    wsSend(Object.assign({ type: 'text_chunk', text: seg.text, speaker: seg.speaker, tool: currentTool, mode: 'general' }, f));
+    wsSend(Object.assign({ type: 'text_chunk', text: seg.text, speaker: w === 'them' ? 'Them' : 'You', tool: currentTool, mode: 'general' }, f));
   }
 }
 async function startListening() {
