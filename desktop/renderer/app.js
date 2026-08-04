@@ -18,6 +18,8 @@ const ICONS = {
   list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h9"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6 9 12l5.5 6"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.2"/><path d="M20 20l-3.6-3.6"/></svg>',
+  minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.5 12h13"/></svg>',
+  fit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.5H4.5V7M16 3.5h3.5V7M8 20.5H4.5V17M16 20.5h3.5V17"/></svg>',
 };
 function injectIcons(root) { (root || document).querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = ICONS[el.dataset.icon] || ''; }); }
 
@@ -49,14 +51,36 @@ let recStart = 0, recTimer = null, enhanceDirty = false, titleRequested = false;
 mermaid.initialize({ startOnLoad: false, suppressErrorRendering: true, theme: 'base', securityLevel: 'loose',
   themeVariables: { darkMode: true, background: '#0c0b09', primaryColor: '#1e1d1a', primaryTextColor: '#f5f3ed', primaryBorderColor: '#3d3a35', lineColor: '#716d65', secondaryColor: '#1e1d1a', tertiaryColor: '#161514', edgeLabelBackground: '#161514', clusterBkg: '#161514', clusterBorder: '#332f2a' },
   flowchart: { curve: 'basis', padding: 16, nodeSpacing: 50, rankSpacing: 50, htmlLabels: true } });
+let mapScale = 1, mapTx = 0, mapTy = 0, mapDims = { w: 0, h: 0 };
+function applyMap() { const s = $('map').querySelector('svg'); if (s) s.style.transform = `translate(${mapTx}px, ${mapTy}px) scale(${mapScale})`; }
+function fitMap() {
+  const s = $('map').querySelector('svg'); if (!s) return;
+  const vb = s.viewBox && s.viewBox.baseVal;
+  const w = vb && vb.width ? vb.width : 800, h = vb && vb.height ? vb.height : 600;
+  mapDims = { w, h };
+  s.style.width = w + 'px'; s.style.height = h + 'px';
+  const cw = $('map').clientWidth, ch = $('map').clientHeight;
+  let sc = Math.min((cw - 20) / w, (ch - 20) / h);
+  if (!isFinite(sc) || sc <= 0) sc = 1;
+  mapScale = Math.min(sc, 1.8);
+  mapTx = (cw - w * mapScale) / 2; mapTy = (ch - h * mapScale) / 2;
+  applyMap();
+}
+function zoomMap(factor, cx, cy) {
+  const el = $('map'), rect = el.getBoundingClientRect();
+  const mx = cx == null ? rect.width / 2 : cx - rect.left, my = cy == null ? rect.height / 2 : cy - rect.top;
+  const ns = Math.min(8, Math.max(0.1, mapScale * factor));
+  mapTx = mx - (mx - mapTx) * (ns / mapScale);
+  mapTy = my - (my - mapTy) * (ns / mapScale);
+  mapScale = ns; applyMap();
+}
 async function renderMap() {
   const code = S.mermaid[currentTool];
-  if (!code) { $('map').innerHTML = ''; $('map-empty').style.display = ''; renderMapState(); return; }
+  if (!code) { $('map').innerHTML = ''; $('map-empty').style.display = ''; $('map-ctrl').classList.add('hidden'); renderMapState(); return; }
   try {
     const { svg } = await mermaid.render('mm-' + Date.now(), code);
-    $('map').innerHTML = svg; $('map-empty').style.display = 'none';
-    const s = $('map').querySelector('svg'), vb = s && s.viewBox && s.viewBox.baseVal;
-    if (s && vb && vb.width) { const cw = $('map').clientWidth - 24, ch = $('map').clientHeight - 24; const fit = Math.max(0.5, Math.min(cw / vb.width, ch / vb.height, 2.2)); s.style.width = vb.width + 'px'; s.style.height = vb.height + 'px'; s.style.transform = `scale(${fit})`; s.style.transformOrigin = 'center'; }
+    $('map').innerHTML = svg; $('map-empty').style.display = 'none'; $('map-ctrl').classList.remove('hidden');
+    fitMap();
   } catch {}
 }
 
@@ -89,7 +113,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({
 function mdInline(s) { return esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
 function badge(id, n) { const b = $(id); if (!b) return; b.textContent = n; b.classList.toggle('show', n > 0); }
 
-function addLine(who, text) { const w = /them|other|speaker/i.test(who) ? 'them' : 'you'; S.lines.push({ who: w, text }); if (S.lines.length > 400) S.lines.shift(); renderTranscript(); save(); }
+function addLine(who, text) { const w = /them|other|speaker/i.test(who) ? 'them' : 'you'; S.lines.push({ who: w, text }); if (S.lines.length > 20000) S.lines.shift(); renderTranscript(); save(); }
 function renderTranscript() { const el = $('transcript'); $('transcript-empty').style.display = S.lines.length ? 'none' : ''; el.innerHTML = S.lines.map((l) => `<div class="tline"><span class="who ${l.who}">${l.who === 'them' ? 'Them' : 'You'}</span>${esc(l.text)}</div>`).join(''); el.scrollTop = el.scrollHeight; badge('b-transcript', S.lines.length); }
 function addTerms(terms) { let a = false; for (const t of terms) { if (!S.terms.some((x) => x.term.toLowerCase() === (t.term || '').toLowerCase())) { S.terms.push({ term: t.term, definition: t.definition }); a = true; } } if (a) { renderTerms(); save(); } }
 function renderTerms() { $('terms-empty').style.display = S.terms.length ? 'none' : ''; $('terms').innerHTML = S.terms.map((t) => `<div class="term"><b>${esc(t.term)}</b><span>${esc(t.definition)}</span></div>`).join(''); badge('b-terms', S.terms.length); }
@@ -224,7 +248,20 @@ function init() {
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setTab(b.dataset.tab); });
   $('modes').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); currentTool = b.dataset.tool; S.mode = currentTool; save(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); renderMap(); if (mapArmed && !S.mermaid[currentTool]) mapNow(); });
   $('map-start').addEventListener('click', armMapping);
-  $('ask-form').addEventListener('submit', (e) => { e.preventDefault(); const q = $('ask-input').value.trim(); if (!q) return; $('ask-input').value = ''; setTab('chat'); pendingAnswer = addAsk(q); if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'ask', text: q, context: S.lines.slice(-40).map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n') }); });
+  // Map pan + zoom
+  (function () {
+    const el = $('map');
+    el.addEventListener('wheel', (e) => { e.preventDefault(); zoomMap(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+    let panning = false, sx = 0, sy = 0;
+    el.addEventListener('mousedown', (e) => { panning = true; sx = e.clientX; sy = e.clientY; el.classList.add('grabbing'); });
+    window.addEventListener('mousemove', (e) => { if (!panning) return; mapTx += e.clientX - sx; mapTy += e.clientY - sy; sx = e.clientX; sy = e.clientY; applyMap(); });
+    window.addEventListener('mouseup', () => { panning = false; el.classList.remove('grabbing'); });
+    el.addEventListener('dblclick', () => fitMap());
+    $('map-zin').addEventListener('click', () => zoomMap(1.25));
+    $('map-zout').addEventListener('click', () => zoomMap(0.8));
+    $('map-fit').addEventListener('click', () => fitMap());
+  })();
+  $('ask-form').addEventListener('submit', (e) => { e.preventDefault(); const q = $('ask-input').value.trim(); if (!q) return; $('ask-input').value = ''; setTab('chat'); pendingAnswer = addAsk(q); if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'ask', text: q, context: S.lines.map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n') }); });
   $('export').addEventListener('click', () => { const md = [`# ${S.title || 'Meeting notes'}`, '', S.enhanced || '', '', '## Transcript', ...S.lines.map((l) => `**${l.who === 'them' ? 'Them' : 'You'}:** ${l.text}`)].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `gideon-${(S.title || 'notes').replace(/\s+/g, '-').toLowerCase()}.md`; a.click(); URL.revokeObjectURL(a.href); });
   $('new').addEventListener('click', newNote);
   $('listen').addEventListener('click', () => (listening ? stopListening() : startListening()));

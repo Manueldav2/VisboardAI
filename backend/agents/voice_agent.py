@@ -366,7 +366,7 @@ async def answer_question(question: str, context: str = "") -> str:
             config=genai.types.GenerateContentConfig(
                 system_instruction=sys,
                 temperature=0.4,
-                max_output_tokens=700,
+                max_output_tokens=2048,
                 thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
             ),
         )
@@ -494,7 +494,7 @@ async def enhance_notes(transcript: str, notes: str = "", title: str = "") -> st
             config=genai.types.GenerateContentConfig(
                 system_instruction=sys,
                 temperature=0.15,
-                max_output_tokens=1600,
+                max_output_tokens=8192,
                 thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
             ),
         )

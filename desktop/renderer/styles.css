@@ -154,9 +154,15 @@ body.toast .mbanner { top: 8px; left: 8px; right: 8px; }
 .ins.good { background: rgba(107,158,90,.1); border-color: rgba(107,158,90,.3); } .ins.good .h { color: var(--green); }
 
 /* Map */
-.map { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 12px; }
+.map { flex: 1; position: relative; overflow: hidden; cursor: grab; }
 .map:empty { display: none; }
-.map svg { max-width: none; height: auto; }
+.map.grabbing { cursor: grabbing; }
+.map svg { position: absolute; top: 0; left: 0; transform-origin: 0 0; max-width: none; height: auto; will-change: transform; }
+.map-ctrl { position: absolute; right: 10px; bottom: 10px; z-index: 5; display: flex; flex-direction: column; gap: 4px; }
+.map-ctrl button { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: rgba(20,18,15,.9); color: var(--text-2); cursor: pointer; display: grid; place-items: center; transition: all .14s; }
+.map-ctrl button:hover { color: var(--text); background: rgba(40,36,30,.95); border-color: rgba(212,166,74,.3); }
+.map-ctrl svg { width: 15px; height: 15px; }
+.map-ctrl.hidden { display: none; }
 .map-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; text-align: center; margin: auto; }
 .map-empty-text { max-width: 250px; line-height: 1.5; }
 .map-start { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(212,166,74,.42); background: rgba(212,166,74,.12); color: var(--accent); cursor: pointer; font: 700 12.5px var(--font); padding: 9px 17px; border-radius: 999px; transition: all .15s; }
