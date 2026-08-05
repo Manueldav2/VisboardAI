@@ -306,7 +306,17 @@ function init() {
     $('map-fit').addEventListener('click', () => fitMap());
     $('map-remap').addEventListener('click', () => { const b = $('map-remap'); b.classList.add('spin'); setStatus('Mapping'); mapNow(); setTimeout(() => b.classList.remove('spin'), 1200); });
   })();
-  $('ask-form').addEventListener('submit', (e) => { e.preventDefault(); const q = $('ask-input').value.trim(); if (!q) return; $('ask-input').value = ''; setTab('chat'); pendingAnswer = addAsk(q); if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'ask', text: q, context: S.lines.map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n') }); });
+  $('ask-form').addEventListener('submit', (e) => {
+    e.preventDefault(); const q = $('ask-input').value.trim(); if (!q) return;
+    $('ask-input').value = ''; setTab('chat'); pendingAnswer = addAsk(q);
+    if (!ws || ws.readyState > 1) connect();
+    const parts = [];
+    if (S.title) parts.push(`## Meeting: ${S.title}`);
+    if (S.enhanced) parts.push(`## Notes (names & facts resolved)\n${S.enhanced}`);
+    else if (S.notes && S.notes.trim()) parts.push(`## My notes\n${S.notes}`);
+    parts.push(`## Full transcript\n${S.lines.map((l) => `${l.who === 'them' ? 'Them' : 'You'}: ${l.text}`).join('\n')}`);
+    wsSend({ type: 'ask', text: q, context: parts.join('\n\n') });
+  });
   $('export').addEventListener('click', () => { const md = [`# ${S.title || 'Meeting notes'}`, '', S.enhanced || '', '', '## Transcript', ...S.lines.map((l) => `**${l.who === 'them' ? 'Them' : 'You'}:** ${l.text}`)].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = `gideon-${(S.title || 'notes').replace(/\s+/g, '-').toLowerCase()}.md`; a.click(); URL.revokeObjectURL(a.href); });
   $('new').addEventListener('click', newNote);
   $('listen').addEventListener('click', () => (listening ? stopListening() : startListening()));
