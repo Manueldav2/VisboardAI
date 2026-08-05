@@ -1,7 +1,7 @@
 {
   "name": "gideon-listener",
   "productName": "Gideon Listener",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Turn on Gideon before a meeting — it listens and maps your thinking live.",
   "main": "main.js",
   "author": "Manuel David",
