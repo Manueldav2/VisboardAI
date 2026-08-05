@@ -3,6 +3,7 @@ const { execFile, spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const db = require('./db');
 
 // Debug log (helps diagnose tray/detection without a screen).
 const DBG = path.join(os.tmpdir(), 'gideon-debug.log');
@@ -219,6 +220,7 @@ async function ensureMic() {
 
 app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide(); // live in the menu bar
+  try { await db.initDb(); } catch (e) { dbg('db init failed:', String(e).slice(0, 200)); }
   wireDisplayMedia();
   checkYap();
   await ensureMic();
@@ -315,3 +317,12 @@ function startStream(opts) {
 ipcMain.handle('stt-available', () => yapOk);
 ipcMain.handle('stt-start', (_e, opts) => { appListening = true; return startStream(opts || {}); });
 ipcMain.handle('stt-stop', () => { appListening = false; stopStream(); });
+
+// ── Meeting storage (SQLite) ──
+ipcMain.handle('db-list', () => { try { return db.listMeta(); } catch { return []; } });
+ipcMain.handle('db-search', (_e, q) => { try { return db.search(q); } catch { return []; } });
+ipcMain.handle('db-get', (_e, id) => { try { return db.get(id); } catch { return null; } });
+ipcMain.handle('db-upsert', (_e, note) => { try { db.upsert(note); } catch {} });
+ipcMain.handle('db-remove', (_e, id) => { try { db.remove(id); } catch {} });
+ipcMain.handle('db-import', (_e, notes) => { try { db.importAll(notes); return db.count(); } catch { return 0; } });
+ipcMain.handle('db-count', () => { try { return db.count(); } catch { return 0; } });

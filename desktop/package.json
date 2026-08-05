@@ -1,7 +1,7 @@
 {
   "name": "gideon-listener",
   "productName": "Gideon Listener",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "description": "Turn on Gideon before a meeting — it listens and maps your thinking live.",
   "main": "main.js",
   "author": "Manuel David",
@@ -12,6 +12,7 @@
     "dist:mac": "electron-builder --mac"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8"
   },
@@ -24,10 +25,18 @@
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**/*"
+      "db.js",
+      "renderer/**/*",
+      "node_modules/**/*"
     ],
     "extraResources": [
-      { "from": "bin", "to": "bin" }
+      {
+        "from": "bin",
+        "to": "bin"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/sql.js/dist/**"
     ],
     "afterPack": "scripts/sign-helpers.js",
     "afterSign": "scripts/notarize.js",
@@ -39,8 +48,18 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
-        { "target": "dmg", "arch": ["arm64"] },
-        { "target": "zip", "arch": ["arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "icon": "renderer/icon.png",
       "hardenedRuntime": true,
@@ -63,5 +82,8 @@
     "dmg": {
       "title": "Gideon Listener"
     }
+  },
+  "dependencies": {
+    "sql.js": "^1.14.1"
   }
 }

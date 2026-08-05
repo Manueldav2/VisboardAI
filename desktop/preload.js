@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('gideon', {
   sttAvailable: () => ipcRenderer.invoke('stt-available'),
   sttStart: (opts) => ipcRenderer.invoke('stt-start', opts),
   sttStop: () => ipcRenderer.invoke('stt-stop'),
+  dbList: () => ipcRenderer.invoke('db-list'),
+  dbSearch: (q) => ipcRenderer.invoke('db-search', q),
+  dbGet: (id) => ipcRenderer.invoke('db-get', id),
+  dbUpsert: (n) => ipcRenderer.invoke('db-upsert', n),
+  dbRemove: (id) => ipcRenderer.invoke('db-remove', id),
+  dbImport: (notes) => ipcRenderer.invoke('db-import', notes),
+  dbCount: () => ipcRenderer.invoke('db-count'),
   onSttSegment: (cb) => ipcRenderer.on('stt-segment', (_e, seg) => cb(seg)),
   onSttError: (cb) => ipcRenderer.on('stt-error', (_e, msg) => cb(msg)),
 });

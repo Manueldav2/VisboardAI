@@ -28,20 +28,37 @@ function injectIcons(root) { (root || document).querySelectorAll('[data-icon]').
 
 // ── State ──
 const S = { id: '', date: 0, updated: 0, title: '', notes: '', enhanced: '', lines: [], terms: [], asks: [], mermaid: { thought_plot: '', architect: '', argument_ref: '' }, mode: 'thought_plot', tab: 'notes' };
-let NOTES = [];
+const DB = (window.gideon && window.gideon.dbList) ? window.gideon : null; // SQLite via IPC
 function uid() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function freshSession() { return { id: uid(), date: Date.now(), updated: Date.now(), title: '', notes: '', enhanced: '', lines: [], terms: [], asks: [], mermaid: { thought_plot: '', architect: '', argument_ref: '' }, mode: currentTool, tab: 'notes' }; }
-function loadAll() {
-  try { NOTES = JSON.parse(localStorage.getItem('gideon-notes') || '[]'); } catch { NOTES = []; }
-  const cur = NOTES.find((n) => n.id === localStorage.getItem('gideon-current'));
+async function loadAll() {
+  // One-time migration of legacy localStorage notes into SQLite. Robust to
+  // partial runs: import only if the DB is empty, then drop the localStorage copy.
+  if (DB) {
+    try {
+      const old = JSON.parse(localStorage.getItem('gideon-notes') || '[]');
+      if (old.length) {
+        const cnt = await DB.dbCount();
+        if (cnt === 0) await DB.dbImport(old);
+        localStorage.removeItem('gideon-notes');
+      }
+    } catch {}
+  }
+  const curId = localStorage.getItem('gideon-current');
+  let cur = null;
+  if (DB && curId) { try { cur = await DB.dbGet(curId); } catch {} }
+  if (!DB && curId) { try { const arr = JSON.parse(localStorage.getItem('gideon-notes') || '[]'); cur = arr.find((n) => n.id === curId); } catch {} }
   if (cur) Object.assign(S, cur); else Object.assign(S, freshSession());
 }
 let saveT = null;
 function save() {
   S.updated = Date.now(); if (!S.date) S.date = Date.now();
-  const i = NOTES.findIndex((n) => n.id === S.id); const snap = JSON.parse(JSON.stringify(S));
-  if (i >= 0) NOTES[i] = snap; else NOTES.unshift(snap);
-  clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem('gideon-notes', JSON.stringify(NOTES.slice(0, 200))); localStorage.setItem('gideon-current', S.id); } catch {} }, 250);
+  const snap = JSON.parse(JSON.stringify(S));
+  clearTimeout(saveT); saveT = setTimeout(() => {
+    try { localStorage.setItem('gideon-current', S.id); } catch {}
+    if (DB) { DB.dbUpsert(snap); }
+    else { try { const arr = JSON.parse(localStorage.getItem('gideon-notes') || '[]'); const i = arr.findIndex((n) => n.id === snap.id); if (i >= 0) arr[i] = snap; else arr.unshift(snap); localStorage.setItem('gideon-notes', JSON.stringify(arr.slice(0, 200))); } catch {} }
+  }, 250);
 }
 function relTime(ts) { if (!ts) return 'Today'; const d = new Date(ts), now = new Date(), day = 86400000, diff = now - ts; if (diff < day && now.getDate() === d.getDate()) return 'Today · ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); if (diff < 2 * day) return 'Yesterday'; if (diff < 7 * day) return d.toLocaleDateString([], { weekday: 'long' }); return d.toLocaleDateString([], { month: 'short', day: 'numeric' }); }
 
@@ -161,13 +178,23 @@ let termsRequested = false;
 function requestTermsOnce() { if (termsRequested) return; termsRequested = true; if (!ws || ws.readyState > 1) connect(); wsSend({ type: 'terms_now', text: transcriptText(60) }); }
 
 // ── Library ──
-function openLibrary() { renderLibrary(''); $('lib-search-input').value = ''; $('library').classList.remove('hidden'); }
+function openLibrary() { $('lib-search-input').value = ''; $('library').classList.remove('hidden'); renderLibrary(''); }
 function closeLibrary() { $('library').classList.add('hidden'); }
-function renderLibrary(q) {
-  const list = NOTES.slice().sort((a, b) => (b.updated || b.date || 0) - (a.updated || a.date || 0));
-  const f = q ? list.filter((n) => ((n.title || '') + ' ' + (n.notes || '') + ' ' + (n.lines || []).map((l) => l.text).join(' ')).toLowerCase().includes(q.toLowerCase())) : list;
-  $('lib-empty').style.display = f.length ? 'none' : '';
-  $('lib-list').innerHTML = f.map((n) => { const snip = (n.enhanced || n.notes || (n.lines || []).map((l) => l.text).join(' ') || '').replace(/[#*\n]/g, ' ').trim().slice(0, 96); return `<button class="lib-item${n.id === S.id ? ' cur' : ''}" data-id="${n.id}"><div class="li-title">${esc(n.title || 'Untitled note')}</div><div class="li-sub">${relTime(n.updated || n.date)} · ${(n.lines || []).length} lines</div>${snip ? `<div class="li-snip">${esc(snip)}</div>` : ''}</button>`; }).join('');
+async function libRows(q) {
+  if (DB) { try { return q ? await DB.dbSearch(q) : await DB.dbList(); } catch { return []; } }
+  // localStorage fallback
+  let arr = []; try { arr = JSON.parse(localStorage.getItem('gideon-notes') || '[]'); } catch {}
+  arr = arr.map((n) => ({ id: n.id, title: n.title, date: n.date, updated: n.updated, lines: (n.lines || []).length, snippet: (n.enhanced || n.notes || (n.lines || []).map((l) => l.text).join(' ') || '').replace(/[#*\n]/g, ' ').trim().slice(0, 120) }))
+    .sort((a, b) => (b.updated || b.date || 0) - (a.updated || a.date || 0));
+  return q ? arr.filter((n) => (n.title + ' ' + n.snippet).toLowerCase().includes(q.toLowerCase())) : arr;
+}
+let libSeq = 0;
+async function renderLibrary(q) {
+  const seq = ++libSeq;
+  const rows = await libRows(q);
+  if (seq !== libSeq) return; // a newer search superseded this one
+  $('lib-empty').style.display = rows.length ? 'none' : '';
+  $('lib-list').innerHTML = rows.map((n) => `<button class="lib-item${n.id === S.id ? ' cur' : ''}" data-id="${esc(n.id)}"><div class="li-title">${esc(n.title || 'Untitled note')}</div><div class="li-sub">${relTime(n.updated || n.date)} · ${n.lines || 0} lines</div>${n.snippet ? `<div class="li-snip">${esc(n.snippet)}</div>` : ''}</button>`).join('');
 }
 function hydrate() {
   $('title').textContent = S.title || ''; $('editor').innerText = S.notes || '';
@@ -176,7 +203,7 @@ function hydrate() {
   renderTranscript(); renderTerms(); renderMap(); $('asks').innerHTML = ''; $('chat-empty').style.display = ''; showEnhanced(false);
   $('meta-date').textContent = relTime(S.date); titleRequested = !!S.title; termsRequested = false; mapArmed = false;
 }
-function openNote(id) { save(); const n = NOTES.find((x) => x.id === id); if (!n) return; Object.assign(S, JSON.parse(JSON.stringify(n))); hydrate(); setTab('notes'); closeLibrary(); }
+async function openNote(id) { save(); let n = null; if (DB) { try { n = await DB.dbGet(id); } catch {} } else { try { n = JSON.parse(localStorage.getItem('gideon-notes') || '[]').find((x) => x.id === id); } catch {} } if (!n) return; Object.assign(S, JSON.parse(JSON.stringify(n))); hydrate(); setTab('notes'); closeLibrary(); }
 function newNote() { if (listening) stopListening(); save(); Object.assign(S, freshSession()); hydrate(); setTab('notes'); closeLibrary(); if (wsReady) wsSend({ type: 'context_reset', tool: currentTool, mode: 'general' }); }
 
 // ── Audio ──
@@ -261,9 +288,9 @@ function encodeWav(samples, rate) { const buf = new ArrayBuffer(44 + samples.len
 function abToB64(ab) { const b = new Uint8Array(ab); let s = ''; const C = 0x8000; for (let i = 0; i < b.length; i += C) s += String.fromCharCode.apply(null, b.subarray(i, i + C)); return btoa(s); }
 
 // ── Wire up ──
-function init() {
+async function init() {
   injectIcons();
-  loadAll();
+  await loadAll();
   hydrate(); setTab(S.tab || 'notes');
   if (window.gideon && window.gideon.sttAvailable) window.gideon.sttAvailable().then((v) => { localSTT = !!v; });
   if (window.gideon && window.gideon.onSttSegment) window.gideon.onSttSegment(onSegment);
