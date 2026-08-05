@@ -29,16 +29,29 @@
     "extraResources": [
       { "from": "bin", "to": "bin" }
     ],
+    "afterPack": "scripts/sign-helpers.js",
+    "afterSign": "scripts/notarize.js",
+    "publish": {
+      "provider": "github",
+      "owner": "Manueldav2",
+      "repo": "VisboardAI"
+    },
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
-        "dmg"
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
       ],
       "icon": "renderer/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
       "extendInfo": {
         "LSUIElement": 1,
         "NSMicrophoneUsageDescription": "Gideon listens to your voice to build live thought maps.",
-        "NSScreenCaptureUsageDescription": "Gideon captures system audio so it can hear the whole meeting."
+        "NSScreenCaptureUsageDescription": "Gideon captures system audio so it can hear the whole meeting.",
+        "NSCameraUsageDescription": "Gideon detects when you join a video call so it can offer to take notes."
       }
     },
     "win": {

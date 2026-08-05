@@ -1,0 +1,59 @@
+name: Gideon Desktop Release (signed + notarized)
+
+# Push a tag like `gideon-v0.4.0` to build a signed, notarized macOS build
+# and publish it to a GitHub release of the same name.
+on:
+  push:
+    tags:
+      - 'gideon-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Import Developer ID signing certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      - name: Build, sign & notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: 6PG9CR3SRN
+          CSC_NAME: "Developer ID Application: Myles Iyabor-David (6PG9CR3SRN)"
+          CSC_KEYCHAIN: build.keychain
+        run: npx electron-builder --mac
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release/*.dmg release/*.zip \
+            --title "Gideon ${GITHUB_REF_NAME} — signed & notarized" \
+            --notes "Signed with Developer ID and notarized by Apple — opens with a normal double-click, no Gatekeeper warning." \
+            --repo Manueldav2/VisboardAI \
+          || gh release upload "${GITHUB_REF_NAME}" release/*.dmg release/*.zip --clobber --repo Manueldav2/VisboardAI

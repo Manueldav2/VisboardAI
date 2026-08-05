@@ -17,12 +17,15 @@ import {
   Sparkles,
   Menu,
   X,
+  Download,
+  type LucideIcon,
 } from 'lucide-react';
 import { BlobCursor } from '@/components/ui/blob-cursor';
 import { useIsMobile } from '@/lib/useIsMobile';
 
-const navItems = [
+const navItems: { href: string; label: string; icon: LucideIcon; highlight?: boolean }[] = [
   { href: '/', label: 'Gideon', icon: MessageSquare },
+  { href: '/download', label: 'Download App', icon: Download, highlight: true },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/study-buddy', label: 'Study Buddy', icon: Mic },
@@ -142,7 +145,7 @@ export default function RootLayout({
                         href={item.href}
                         onClick={() => setMobileMenuOpen(false)}
                         className={`sidebar-link ${isActive ? 'active' : ''}`}
-                        style={{ minHeight: '44px' }}
+                        style={{ minHeight: '44px', ...(item.highlight ? { color: 'var(--accent)', background: 'rgba(212,166,74,0.10)', fontWeight: 600 } : {}) }}
                       >
                         <Icon size={19} className="flex-shrink-0" />
                         <span>{item.label}</span>
@@ -211,6 +214,7 @@ export default function RootLayout({
                       href={item.href}
                       className={`sidebar-link ${isActive ? 'active' : ''}`}
                       title={collapsed ? item.label : undefined}
+                      style={item.highlight ? { color: 'var(--accent)', background: 'rgba(212,166,74,0.10)', fontWeight: 600 } : undefined}
                     >
                       <Icon size={19} className="flex-shrink-0" />
                       {!collapsed && <span>{item.label}</span>}
