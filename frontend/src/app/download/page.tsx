@@ -37,12 +37,13 @@ export default function DownloadPage() {
           <a href={DMG_URL} className="dl-btn">
             <Download size={18} /> Download for macOS
           </a>
-          <span className="dl-plat"><Apple size={13} /> Apple Silicon · v0.3.0 · 94 MB</span>
+          <span className="dl-plat"><Apple size={13} /> Apple Silicon · macOS 26 · v0.4.0 · 100 MB</span>
         </div>
 
         <div className="dl-note">
-          <b>First launch:</b> it&apos;s not code-signed yet, so macOS will warn you.
-          Right-click the app → <b>Open</b> → <b>Open</b>, and allow the microphone.
+          <b>First launch:</b> it&apos;s not notarized yet, so macOS blocks it once. Open it,
+          then go to <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.
+          Allow <b>Microphone</b> and <b>Screen Recording</b> when asked.
         </div>
       </section>
 
@@ -67,9 +68,14 @@ export default function DownloadPage() {
           <li><span>3</span> It transcribes and draws your thinking as a live diagram — corrections included.</li>
         </ol>
         <p className="dl-foot">
-          Windows build, meeting history, and code-signing are coming next. Global hotkeys: ⌘\ hide · ⌘⇧L listen · ⌘⇧A ask.
+          Windows build and code-signing are coming next. Global hotkeys: ⌘\ hide · ⌘⇧L listen · ⌘⇧A ask.
         </p>
       </section>
+
+      {/* Thumb-zone CTA (mobile): always reachable at the bottom */}
+      <a href={DMG_URL} className="dl-sticky">
+        <Download size={18} /> Download for macOS
+      </a>
     </div>
   );
 }

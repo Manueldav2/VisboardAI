@@ -1451,8 +1451,9 @@ body::before {
 .dl-nav { position: relative; z-index: 1; padding: 1.4rem 1.6rem; }
 .dl-back {
   display: inline-flex; align-items: center; gap: 0.4rem;
+  min-height: 44px; padding: 0 0.5rem; margin-left: -0.5rem; /* 44px touch target */
   font-family: var(--font-display); font-size: 1.1rem; color: var(--text-primary);
-  text-decoration: none;
+  text-decoration: none; -webkit-tap-highlight-color: transparent;
 }
 .dl-back svg { color: var(--text-muted); }
 
@@ -1477,14 +1478,37 @@ body::before {
 }
 .dl-cta { margin-top: 2.2rem; display: flex; flex-direction: column; align-items: center; gap: 0.7rem; }
 .dl-btn {
-  display: inline-flex; align-items: center; gap: 0.55rem;
-  padding: 0.85rem 1.6rem; border-radius: 999px; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem;
+  min-height: 48px; padding: 0.85rem 1.6rem; border-radius: 999px; text-decoration: none;
   font-size: 1rem; font-weight: 700; color: var(--bg);
   background: radial-gradient(circle at 35% 30%, var(--accent-hover), var(--accent) 75%);
   box-shadow: 0 6px 24px rgba(212,166,74,0.4);
   transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s;
+  -webkit-tap-highlight-color: transparent;
 }
-.dl-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(212,166,74,0.55); }
+/* Hover is a desktop-only enhancement (no-hover doctrine). */
+@media (hover: hover) and (pointer: fine) {
+  .dl-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(212,166,74,0.55); }
+}
+.dl-btn:active { transform: scale(0.98); }
+
+/* Thumb-zone sticky download bar — mobile only, respects the home indicator. */
+.dl-sticky { display: none; }
+@media (max-width: 640px) {
+  .dl-sticky {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: center; gap: 0.55rem;
+    min-height: 52px;
+    padding: 0.9rem 1.6rem calc(0.9rem + env(safe-area-inset-bottom));
+    font-size: 1rem; font-weight: 700; color: var(--bg); text-decoration: none;
+    background: radial-gradient(circle at 50% 0%, var(--accent-hover), var(--accent) 80%);
+    box-shadow: 0 -6px 24px rgba(0,0,0,0.35);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dl-sticky:active { filter: brightness(0.95); }
+  /* Keep page content clear of the sticky bar. */
+  .dl-steps { margin-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+}
 .dl-plat { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); }
 .dl-note {
   max-width: 30rem; margin: 1.8rem auto 0;
